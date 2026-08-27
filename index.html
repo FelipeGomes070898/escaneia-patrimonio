@@ -556,6 +556,23 @@
   }
   .field textarea{resize:vertical;min-height:44px;font-family:var(--font-body);}
   .field .hint{font-size:11.5px;color:var(--text-muted);margin-top:5px;}
+  .field select{
+    width:100%;
+    background:var(--surface-2);
+    border:1.5px solid transparent;
+    border-radius:var(--radius-sm);
+    padding:12px 36px 12px 13px;
+    font-size:15.5px;
+    color:var(--text);
+    font-family:var(--font-body);
+    appearance:none;
+    -webkit-appearance:none;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238FA39F' stroke-width='2'><path d='M6 9l6 6 6-6' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+    background-repeat:no-repeat;
+    background-position:right 12px center;
+    background-size:16px;
+  }
+  .field select:focus{outline:none;border-color:var(--accent);background-color:var(--surface);}
 
   .raw-toggle{
     font-size:12px;
@@ -713,6 +730,59 @@
     color:var(--text);
   }
   .search-input:focus{outline:none;border-color:var(--accent);}
+
+  .loc-chip-row{
+    display:flex;
+    flex-wrap:nowrap;
+    overflow-x:auto;
+    gap:7px;
+    padding-bottom:2px;
+    -webkit-overflow-scrolling:touch;
+  }
+  .loc-chip-row:empty{display:none;}
+  .loc-chip{
+    flex:none;
+    display:flex;
+    align-items:center;
+    gap:6px;
+    background:var(--surface-2);
+    border:1px solid var(--border);
+    color:var(--text);
+    padding:7px 13px;
+    border-radius:100px;
+    font-size:12.5px;
+    font-weight:600;
+    cursor:pointer;
+    white-space:nowrap;
+  }
+  .loc-chip .cnt{
+    background:rgba(0,0,0,0.12);
+    border-radius:100px;
+    padding:1px 7px;
+    font-size:11px;
+    font-family:var(--font-mono);
+  }
+  .loc-chip.active{background:var(--accent);border-color:var(--accent);color:var(--accent-text-on);}
+  .loc-chip.active .cnt{background:rgba(255,255,255,0.25);}
+
+  .loc-group-head{
+    display:flex;
+    align-items:baseline;
+    gap:8px;
+    margin:10px 0 -1px;
+    padding:0 2px;
+  }
+  .loc-group-head:first-child{margin-top:0;}
+  .loc-group-head .name{
+    font-family:var(--font-display);
+    font-size:15.5px;
+    font-weight:700;
+  }
+  .loc-group-head .cnt{
+    font-size:11.5px;
+    color:var(--text-muted);
+    font-family:var(--font-mono);
+  }
 
   .stat-row{
     display:grid;
@@ -1012,6 +1082,7 @@
           <p id="listSubtitle">Itens escaneados nesta vistoria</p>
         </div>
         <input type="text" class="search-input" id="searchInput" placeholder="Buscar por patrimônio, item ou local…">
+        <div class="loc-chip-row" id="locChipRow"></div>
         <div id="listContainer" style="display:flex;flex-direction:column;gap:9px;"></div>
         <div class="empty-state" id="listEmpty" style="display:none;">
           <div class="eicon"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M14 14h3m4 0h0M14 18h7M17.5 14v7" stroke-linecap="round"/></svg></div>
@@ -1312,6 +1383,84 @@ function parseCodigo(raw, formatName){
 }
 
 /* ---------------------------------------------------------------------
+   Local / sala — lista de opções (menu suspenso) + locais personalizados
+   --------------------------------------------------------------------- */
+const LOCAIS_PADRAO = [
+  'Sala 1', 'Sala 2', 'Sala 3', 'Sala 4', 'Sala 5',
+  'Sala da Direção', 'Sala da Vice-Direção', 'Coordenação Pedagógica',
+  'Secretaria', 'Sala dos Professores', 'Biblioteca',
+  'Laboratório de Informática', 'Laboratório de Ciências',
+  'Cozinha', 'Refeitório', 'Almoxarifado / Depósito',
+  'Quadra / Ginásio', 'Pátio', 'Auditório'
+];
+const LOCAL_CUSTOM_KEY = 'locaisCustom';
+
+function getLocaisList(){
+  let custom = [];
+  try { custom = JSON.parse(safeLocalStorageGet(LOCAL_CUSTOM_KEY) || '[]'); } catch (e) { custom = []; }
+  const all = [...LOCAIS_PADRAO];
+  custom.forEach(c => { if (c && !all.includes(c)) all.push(c); });
+  return all;
+}
+
+function addLocalCustom(nome){
+  if (!nome || LOCAIS_PADRAO.includes(nome)) return;
+  let custom = [];
+  try { custom = JSON.parse(safeLocalStorageGet(LOCAL_CUSTOM_KEY) || '[]'); } catch (e) { custom = []; }
+  if (!custom.includes(nome)) {
+    custom.push(nome);
+    safeLocalStorageSet(LOCAL_CUSTOM_KEY, JSON.stringify(custom));
+  }
+}
+
+/** Monta o menu suspenso de local/sala, com opção de digitar um local novo. */
+function renderLocalFieldHtml(idPrefix, selected){
+  const opts = getLocaisList();
+  const isCustomSelected = !!selected && !opts.includes(selected);
+  const optionsHtml = opts.map(o =>
+    `<option value="${escapeHtml(o)}" ${o === selected ? 'selected' : ''}>${escapeHtml(o)}</option>`
+  ).join('');
+  return `
+    <div class="field text-normal">
+      <label for="${idPrefix}Select">Local / sala</label>
+      <select id="${idPrefix}Select">
+        <option value="">Selecione um local…</option>
+        ${optionsHtml}
+        <option value="__custom__" ${isCustomSelected ? 'selected' : ''}>+ Outro local (digitar)</option>
+      </select>
+      <input type="text" id="${idPrefix}Custom" placeholder="Digite o nome do local"
+        value="${isCustomSelected ? escapeHtml(selected) : ''}"
+        style="margin-top:8px;${isCustomSelected ? '' : 'display:none;'}">
+    </div>`;
+}
+
+/** Liga o comportamento do menu suspenso de local (mostra o campo de texto
+ *  quando "+ Outro local" é escolhido). Chamar depois de inserir o HTML. */
+function bindLocalFieldEvents(idPrefix){
+  const sel = document.getElementById(idPrefix + 'Select');
+  const custom = document.getElementById(idPrefix + 'Custom');
+  if (!sel || !custom) return;
+  sel.addEventListener('change', () => {
+    if (sel.value === '__custom__') {
+      custom.style.display = '';
+      custom.focus();
+    } else {
+      custom.style.display = 'none';
+    }
+  });
+}
+
+/** Lê o valor final do campo de local (do select, ou do texto digitado). */
+function readLocalFieldValue(idPrefix){
+  const sel = document.getElementById(idPrefix + 'Select');
+  if (!sel) return '';
+  if (sel.value === '__custom__') {
+    return (document.getElementById(idPrefix + 'Custom').value || '').trim();
+  }
+  return sel.value || '';
+}
+
+/* ---------------------------------------------------------------------
    Busca automática dos dados do bem no sistema (a partir do link do QR)
    --------------------------------------------------------------------- */
 const SISTEMA_FIELD_LABELS = {
@@ -1393,11 +1542,20 @@ function parseSistemaBens(html){
 /** Busca o HTML do link do QR e tenta extrair os dados — com tempo limite e
  *  tratamento de erro, já que sites de governo podem não permitir esse tipo
  *  de acesso entre domínios (CORS). Nunca lança erro para quem chamou. */
+// URL do proxy próprio (Cloudflare Worker) usado para contornar o bloqueio de
+// CORS do sistema do governo — sem isso, o navegador nunca deixa o app buscar
+// os dados sozinho. Preencher depois de criar o Worker (ver instruções enviadas).
+const SISTEMA_PROXY_BASE = '';
+
 async function fetchSistemaDados(url){
+  if (!SISTEMA_PROXY_BASE) {
+    return { error: 'proxy_not_configured', detail: 'O endereço do proxy (SISTEMA_PROXY_BASE) ainda não foi configurado no app.' };
+  }
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 8000);
   try {
-    const resp = await fetch(url, { signal: controller.signal, mode: 'cors', credentials: 'omit' });
+    const proxyUrl = SISTEMA_PROXY_BASE.replace(/\/+$/, '') + '/?url=' + encodeURIComponent(url);
+    const resp = await fetch(proxyUrl, { signal: controller.signal, mode: 'cors', credentials: 'omit' });
     clearTimeout(timeoutId);
     if (!resp.ok) return { error: 'http_' + resp.status, detail: 'HTTP ' + resp.status };
     const html = await resp.text();
@@ -1501,7 +1659,8 @@ const state = {
   facingMode: 'environment',
   pendingScan: null,    // { parsed, fotoBlob, existingRecord }
   detailId: null,
-  html5Qrcode: null
+  html5Qrcode: null,
+  listLocalFilter: 'all'  // 'all' ou o nome exato de um local, para filtrar a aba Registros
 };
 
 /* ---------------------------------------------------------------------
@@ -2048,10 +2207,7 @@ function renderConfirmSheet(){
     <div class="chip-row" id="descChips">
       ${chips.map(c => `<button type="button" class="chip" data-val="${escapeHtml(c)}">${escapeHtml(c)}</button>`).join('')}
     </div>
-    <div class="field text-normal">
-      <label for="fLocal">Local / sala</label>
-      <input type="text" id="fLocal" value="${escapeHtml(ultimoLocal)}" placeholder="Ex.: Sala 4 — Escola Municipal X">
-    </div>
+    ${renderLocalFieldHtml('fLocal', ultimoLocal)}
     ${sistemaBox}
     ${linkBtn}
     <button type="button" class="raw-toggle" id="btnToggleRaw">Ver valor bruto lido</button>
@@ -2075,6 +2231,7 @@ function renderConfirmSheet(){
   document.getElementById('btnRetake').addEventListener('click', retakePhoto);
   document.getElementById('btnDiscardScan').addEventListener('click', discardPendingScan);
   document.getElementById('btnSaveScan').addEventListener('click', saveScannedRecord);
+  bindLocalFieldEvents('fLocal');
 
   let stampTimer = null;
   document.getElementById('fPatrimonio').addEventListener('input', () => {
@@ -2185,7 +2342,8 @@ async function saveScannedRecord(){
     p.fotoBlob = await stampImageDataUrl(p.fotoRaw, patrimonioRaw);
   }
   const descricao = document.getElementById('fDescricao').value.trim();
-  const local = document.getElementById('fLocal').value.trim();
+  const local = readLocalFieldValue('fLocal');
+  addLocalCustom(local);
   const saveAsNewCb = document.getElementById('cbSaveAsNew');
   const forceNew = saveAsNewCb ? saveAsNewCb.checked : false;
 
@@ -2265,46 +2423,118 @@ function baseStatusFor(rec){
   return state.listaBase.some(b => b.patrimonioKey === rec.patrimonioKey) ? 'ok' : 'danger';
 }
 
+function locLabelFor(local){
+  return local && local.trim() ? local.trim() : 'Sem local';
+}
+
+/** Fileira de "pastilhas" (chips) para filtrar a lista por local — uma para
+ *  cada sala/local já usado, com contagem, mais "Todos". */
+function renderLocChips(){
+  const row = document.getElementById('locChipRow');
+  if (!row) return;
+  if (!state.registros.length) { row.innerHTML = ''; return; }
+
+  const counts = new Map();
+  state.registros.forEach(r => {
+    const label = locLabelFor(r.local);
+    counts.set(label, (counts.get(label) || 0) + 1);
+  });
+
+  const semLocalCount = counts.get('Sem local') || 0;
+  counts.delete('Sem local');
+  const names = [...counts.keys()].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  if (semLocalCount) names.push('Sem local');
+
+  if (names.length < 2) { row.innerHTML = ''; return; } // um único local não precisa de filtro
+
+  const chips = [
+    `<button type="button" class="loc-chip ${state.listLocalFilter === 'all' ? 'active' : ''}" data-loc="all">Todos <span class="cnt">${state.registros.length}</span></button>`,
+    ...names.map(name => {
+      const cnt = name === 'Sem local' ? semLocalCount : counts.get(name);
+      return `<button type="button" class="loc-chip ${state.listLocalFilter === name ? 'active' : ''}" data-loc="${escapeHtml(name)}">${escapeHtml(name)} <span class="cnt">${cnt}</span></button>`;
+    })
+  ];
+  row.innerHTML = chips.join('');
+  row.querySelectorAll('.loc-chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.listLocalFilter = btn.dataset.loc;
+      renderList();
+    });
+  });
+}
+
+function renderRecCardHtml(r){
+  const status = baseStatusFor(r);
+  const dot = status ? `<span class="status-dot ${status}"></span>` : '';
+  const thumb = r.foto
+    ? `<img class="th" src="${r.foto}" alt="">`
+    : `<div class="th" style="display:flex;align-items:center;justify-content:center;color:var(--text-muted);">
+         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="7" width="18" height="12" rx="2"/><path d="M8 7V5a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" stroke-linecap="round"/></svg>
+       </div>`;
+  return `
+    <div class="rec-card" data-id="${escapeHtml(r.id)}">
+      ${thumb}
+      <div class="info">
+        <div class="pat">${escapeHtml(r.patrimonio || 'Sem número')}</div>
+        <div class="desc">${escapeHtml(r.descricao || 'Sem descrição')}${r.local ? ' · ' + escapeHtml(r.local) : ''}</div>
+        <div class="meta">${dot}${escapeHtml(nowLabel(r.atualizadoEm || r.criadoEm))}</div>
+      </div>
+    </div>`;
+}
+
 function renderList(){
+  renderLocChips();
+
   const q = (document.getElementById('searchInput').value || '').trim().toLowerCase();
   const container = document.getElementById('listContainer');
   const empty = document.getElementById('listEmpty');
 
   const sorted = [...state.registros].sort((a, b) => (b.atualizadoEm || b.criadoEm).localeCompare(a.atualizadoEm || a.criadoEm));
-  const filtered = q ? sorted.filter(r =>
+  let filtered = q ? sorted.filter(r =>
     (r.patrimonio || '').toLowerCase().includes(q) ||
     (r.descricao || '').toLowerCase().includes(q) ||
     (r.local || '').toLowerCase().includes(q)
   ) : sorted;
 
+  if (state.listLocalFilter !== 'all') {
+    filtered = filtered.filter(r => locLabelFor(r.local) === state.listLocalFilter);
+  }
+
+  const activeFilter = q || state.listLocalFilter !== 'all';
+
   if (!filtered.length) {
     container.innerHTML = '';
     empty.style.display = 'block';
-    empty.querySelector('h3').textContent = q ? 'Nada encontrado' : 'Nenhum item ainda';
-    empty.querySelector('p').textContent = q
+    empty.querySelector('h3').textContent = activeFilter ? 'Nada encontrado' : 'Nenhum item ainda';
+    empty.querySelector('p').textContent = activeFilter
       ? 'Tente buscar por outro número, item ou local.'
       : 'Volte para a aba Escanear e aponte a câmera para o QR Code ou código de barras da etiqueta.';
     return;
   }
   empty.style.display = 'none';
 
-  container.innerHTML = filtered.map(r => {
-    const status = baseStatusFor(r);
-    const dot = status ? `<span class="status-dot ${status}"></span>` : '';
-    const thumb = r.foto
-      ? `<img class="th" src="${r.foto}" alt="">`
-      : `<div class="th" style="display:flex;align-items:center;justify-content:center;color:var(--text-muted);">
-           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="7" width="18" height="12" rx="2"/><path d="M8 7V5a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" stroke-linecap="round"/></svg>
-         </div>`;
-    return `
-      <div class="rec-card" data-id="${escapeHtml(r.id)}">
-        ${thumb}
-        <div class="info">
-          <div class="pat">${escapeHtml(r.patrimonio || 'Sem número')}</div>
-          <div class="desc">${escapeHtml(r.descricao || 'Sem descrição')}${r.local ? ' · ' + escapeHtml(r.local) : ''}</div>
-          <div class="meta">${dot}${escapeHtml(nowLabel(r.atualizadoEm || r.criadoEm))}</div>
-        </div>
-      </div>`;
+  // Agrupa por local — cada sala vira sua própria "pastilha" de itens na lista.
+  const groups = new Map();
+  filtered.forEach(r => {
+    const label = locLabelFor(r.local);
+    if (!groups.has(label)) groups.set(label, []);
+    groups.get(label).push(r);
+  });
+
+  const groupNames = [...groups.keys()].sort((a, b) => {
+    if (a === 'Sem local') return 1;
+    if (b === 'Sem local') return -1;
+    return 0; // preserva a ordem de aparição (mais recente primeiro)
+  });
+
+  const showHeaders = state.listLocalFilter === 'all' && groupNames.length > 1;
+
+  container.innerHTML = groupNames.map(name => {
+    const items = groups.get(name);
+    const head = showHeaders
+      ? `<div class="loc-group-head"><span class="name">${escapeHtml(name)}</span><span class="cnt">${items.length} item(ns)</span></div>`
+      : '';
+    return head + items.map(renderRecCardHtml).join('');
   }).join('');
 
   container.querySelectorAll('.rec-card').forEach(card => {
@@ -2346,10 +2576,7 @@ function openDetailSheet(id){
       <label for="dDescricao">Descrição do item</label>
       <input type="text" id="dDescricao" value="${escapeHtml(r.descricao || '')}">
     </div>
-    <div class="field text-normal">
-      <label for="dLocal">Local / sala</label>
-      <input type="text" id="dLocal" value="${escapeHtml(r.local || '')}">
-    </div>
+    ${renderLocalFieldHtml('dLocal', r.local || '')}
     ${linkBtn}
     ${sistemaBox}
     <div class="field">
@@ -2369,6 +2596,7 @@ function openDetailSheet(id){
   });
   document.getElementById('btnDeleteRecord').addEventListener('click', () => deleteRecord(id));
   document.getElementById('btnSaveDetail').addEventListener('click', () => saveDetailEdits(id));
+  bindLocalFieldEvents('dLocal');
 }
 
 async function saveDetailEdits(id){
@@ -2377,7 +2605,8 @@ async function saveDetailEdits(id){
   r.patrimonio = document.getElementById('dPatrimonio').value.trim();
   r.patrimonioKey = patKey(r.patrimonio);
   r.descricao = document.getElementById('dDescricao').value.trim();
-  r.local = document.getElementById('dLocal').value.trim();
+  r.local = readLocalFieldValue('dLocal');
+  addLocalCustom(r.local);
   r.atualizadoEm = new Date().toISOString();
   try {
     await idbPut('registros', r);
