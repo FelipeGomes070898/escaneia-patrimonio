@@ -8,8 +8,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Patrimônio">
 <link rel="manifest" href="manifest.json">
-<link rel="icon" href="icon-192.png" type="image/png">
-<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
@@ -575,6 +575,57 @@
     font-family:var(--font-mono);
     font-size:11.5px;
     opacity:0.85;
+  }
+
+  .sistema-box{
+    border:1px solid var(--border);
+    border-radius:var(--radius-md);
+    padding:13px 14px;
+    margin-bottom:14px;
+    background:var(--surface-2);
+  }
+  .sistema-status{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-size:12.5px;
+    font-weight:600;
+    color:var(--text-muted);
+  }
+  .sistema-status.sistema-ok{color:var(--ok);}
+  .sistema-status.sistema-fail{
+    color:var(--warn);
+    font-weight:500;
+    line-height:1.5;
+    display:block;
+  }
+  .sistema-status svg{flex:none;}
+  .spinner{
+    width:13px;height:13px;
+    border-radius:100%;
+    border:2px solid var(--border);
+    border-top-color:var(--accent);
+    flex:none;
+    animation:spin 0.7s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .sistema-grid{
+    display:grid;
+    grid-template-columns:auto 1fr;
+    gap:7px 14px;
+    margin-top:11px;
+  }
+  .sistema-grid .sk{
+    font-size:11px;
+    font-weight:700;
+    text-transform:uppercase;
+    letter-spacing:0.03em;
+    color:var(--text-muted);
+    white-space:nowrap;
+  }
+  .sistema-grid .sv{
+    font-size:13px;
+    color:var(--text);
   }
 
   .chip-row{
@@ -1227,6 +1278,108 @@ function parseCodigo(raw, formatName){
   return result;
 }
 
+/* ---------------------------------------------------------------------
+   Busca automática dos dados do bem no sistema (a partir do link do QR)
+   --------------------------------------------------------------------- */
+const SISTEMA_FIELD_LABELS = {
+  'Tombamento': 'tombamento',
+  'Tombamento Antigo': 'tombamentoAntigo',
+  'Lote': 'lote',
+  'Tipo': 'tipo',
+  'Classificação': 'classificacao',
+  'Estado de conservação': 'estadoConservacao',
+  'Disponível para Baixa': 'disponivelBaixa',
+  'Unidade': 'unidade',
+  'Departamento': 'departamento',
+  'Responsável': 'responsavel',
+  'Forma de Ingresso': 'formaIngresso',
+  'Data de Entrada': 'dataEntrada',
+  'Valor de Aquisição': 'valorAquisicao',
+  'Valor Residual': 'valorResidual',
+  'Vida Útil': 'vidaUtil',
+  'Vida útil': 'vidaUtil'
+};
+
+/** Tenta extrair os campos conhecidos (Unidade, Departamento, Tombamento, etc.)
+ *  do HTML da página de detalhes do bem — sem depender de conhecer a estrutura
+ *  exata do site, por isso combina três estratégias diferentes. */
+function parseSistemaBens(html){
+  const out = {};
+  try {
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+
+    const h1 = doc.querySelector('h1, h2');
+    if (h1 && h1.textContent.trim()) {
+      out.descricao = h1.textContent.trim().replace(/\s+/g, ' ');
+      let prev = h1.previousElementSibling;
+      let hops = 0;
+      while (prev && hops < 3) {
+        const t = prev.textContent.trim();
+        if (t && t.length < 60 && t === t.toUpperCase() && /[A-ZÀ-Ü]/.test(t)) { out.categoria = t; break; }
+        prev = prev.previousElementSibling;
+        hops++;
+      }
+    }
+
+    // Tabelas: pareia cabeçalho x valor por posição da coluna
+    doc.querySelectorAll('table').forEach((table) => {
+      const headerCells = Array.from(table.querySelectorAll('thead th, thead td'));
+      const bodyRow = table.querySelector('tbody tr');
+      const bodyCells = bodyRow ? Array.from(bodyRow.children) : [];
+      headerCells.forEach((th, i) => {
+        const key = SISTEMA_FIELD_LABELS[th.textContent.trim()];
+        const val = bodyCells[i] ? bodyCells[i].textContent.trim().replace(/\s+/g, ' ') : '';
+        if (key && val && !/^-+$/.test(val)) out[key] = val;
+      });
+    });
+
+    // Texto corrido: "Rótulo: valor" em qualquer parte da página
+    const text = (doc.body ? doc.body.textContent : html) || '';
+    const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+
+    lines.forEach((line) => {
+      const m = line.match(/^([A-Za-zÀ-ÿ ]+?)\s*:\s*(.+)$/);
+      if (m) {
+        const key = SISTEMA_FIELD_LABELS[m[1].trim()];
+        if (key && !out[key] && m[2].trim() && !/^-+$/.test(m[2].trim())) out[key] = m[2].trim();
+      }
+    });
+
+    // Rótulo numa linha, valor na linha seguinte (tabelas renderizadas como texto simples)
+    for (let i = 0; i < lines.length - 1; i++) {
+      const key = SISTEMA_FIELD_LABELS[lines[i]];
+      if (key && !out[key]) {
+        const val = lines[i + 1];
+        if (val && !SISTEMA_FIELD_LABELS[val] && !/^-+$/.test(val)) out[key] = val;
+      }
+    }
+  } catch (e) { /* HTML inesperado — devolve o que conseguiu até aqui */ }
+  return Object.keys(out).length ? out : null;
+}
+
+/** Busca o HTML do link do QR e tenta extrair os dados — com tempo limite e
+ *  tratamento de erro, já que sites de governo podem não permitir esse tipo
+ *  de acesso entre domínios (CORS). Nunca lança erro para quem chamou. */
+async function fetchSistemaDados(url){
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 8000);
+  try {
+    const resp = await fetch(url, { signal: controller.signal, mode: 'cors', credentials: 'omit' });
+    clearTimeout(timeoutId);
+    if (!resp.ok) return { error: 'http_' + resp.status, detail: 'HTTP ' + resp.status };
+    const html = await resp.text();
+    const data = parseSistemaBens(html);
+    return data ? { data } : { error: 'parse_empty', detail: 'Página lida (' + html.length + ' caracteres), mas nenhum campo reconhecido.' };
+  } catch (e) {
+    clearTimeout(timeoutId);
+    const isAbort = e && e.name === 'AbortError';
+    return {
+      error: isAbort ? 'timeout' : 'network_or_cors',
+      detail: isAbort ? 'Tempo esgotado ao buscar a página.' : ('Falha de rede/CORS: ' + (e && e.message ? e.message : String(e)))
+    };
+  }
+}
+
 function nowLabel(iso){
   try {
     const d = new Date(iso);
@@ -1709,6 +1862,11 @@ function renderConfirmSheet(){
       </div>
     </a>` : '';
 
+  const sistemaBox = parsed.link ? `
+    <div class="sistema-box" id="sistemaBox">
+      <div class="sistema-status" id="sistemaStatus"><span class="spinner"></span>Buscando dados no sistema…</div>
+    </div>` : '';
+
   const chips = ['Cadeira','Mesa','Monitor','Computador','Teclado','Mouse','Impressora','Armário','Ventilador','Ar-condicionado','Bebedouro','Estante'];
 
   openSheet(`
@@ -1739,6 +1897,7 @@ function renderConfirmSheet(){
       <label for="fLocal">Local / sala</label>
       <input type="text" id="fLocal" value="${escapeHtml(ultimoLocal)}" placeholder="Ex.: Sala 4 — Escola Municipal X">
     </div>
+    ${sistemaBox}
     ${linkBtn}
     <button type="button" class="raw-toggle" id="btnToggleRaw">Ver valor bruto lido</button>
     <div class="raw-value" id="rawValueBox">${escapeHtml(parsed.valorBruto)}</div>
@@ -1761,6 +1920,77 @@ function renderConfirmSheet(){
   document.getElementById('btnRetake').addEventListener('click', retakePhoto);
   document.getElementById('btnDiscardScan').addEventListener('click', discardPendingScan);
   document.getElementById('btnSaveScan').addEventListener('click', saveScannedRecord);
+
+  if (parsed.link) loadSistemaDados(parsed.link);
+}
+
+/** Dispara a busca automática dos dados do bem e atualiza o painel assim
+ *  que a resposta chegar (ou o erro, para o usuário poder abrir manualmente). */
+async function loadSistemaDados(url){
+  const result = await fetchSistemaDados(url);
+  // o usuário pode ter descartado/salvo/escaneado outra coisa antes da resposta chegar
+  if (!state.pendingScan || state.pendingScan.parsed.link !== url) return;
+  const boxEl = document.getElementById('sistemaBox');
+  if (!boxEl) return;
+
+  if (result.data) {
+    state.pendingScan.sistemaDados = result.data;
+    boxEl.innerHTML = renderSistemaDadosHtml(result.data);
+
+    const descInput = document.getElementById('fDescricao');
+    if (descInput && !descInput.value.trim() && result.data.descricao) {
+      descInput.value = result.data.descricao;
+    }
+    // o número oficial do sistema é mais confiável que o extraído do texto bruto
+    const patInput = document.getElementById('fPatrimonio');
+    if (patInput && result.data.tombamento) {
+      patInput.value = formatPatrimonio(result.data.tombamento);
+    }
+  } else {
+    boxEl.innerHTML = `
+      <div class="sistema-status sistema-fail">
+        Não consegui trazer os dados automaticamente — o sistema pode não permitir esse tipo de acesso entre sites.
+        Use o link acima para ver os dados manualmente.
+      </div>
+      <button type="button" class="raw-toggle" id="btnToggleSistemaErr">Ver detalhe técnico</button>
+      <div class="raw-value" id="sistemaErrBox">${escapeHtml(result.detail || result.error || '')}</div>`;
+    const toggleBtn = document.getElementById('btnToggleSistemaErr');
+    if (toggleBtn) toggleBtn.addEventListener('click', () => {
+      document.getElementById('sistemaErrBox').classList.toggle('show');
+    });
+  }
+}
+
+function renderSistemaDadosHtml(d){
+  const rows = [
+    ['Descrição', d.descricao],
+    ['Categoria', d.categoria],
+    ['Tombamento', d.tombamento],
+    ['Lote', d.lote],
+    ['Tipo', d.tipo],
+    ['Classificação', d.classificacao],
+    ['Estado de conservação', d.estadoConservacao],
+    ['Disponível para baixa', d.disponivelBaixa],
+    ['Unidade', d.unidade],
+    ['Departamento', d.departamento],
+    ['Responsável', d.responsavel],
+    ['Data de entrada', d.dataEntrada],
+    ['Forma de ingresso', d.formaIngresso],
+    ['Valor de aquisição', d.valorAquisicao]
+  ].filter(([, v]) => v);
+
+  if (!rows.length) {
+    return `<div class="sistema-status sistema-fail">O sistema respondeu, mas não consegui reconhecer os campos da página. Use o link acima para ver os dados manualmente.</div>`;
+  }
+
+  return `
+    <div class="sistema-status sistema-ok">
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M20 6L9 17l-5-5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Dados encontrados no sistema
+    </div>
+    <div class="sistema-grid">
+      ${rows.map(([k, v]) => `<div class="sk">${escapeHtml(k)}</div><div class="sv">${escapeHtml(v)}</div>`).join('')}
+    </div>`;
 }
 
 function retakePhoto(){
@@ -1804,6 +2034,7 @@ async function saveScannedRecord(){
   target.local = local;
   target.atualizadoEm = new Date().toISOString();
   if (p.fotoBlob) target.foto = p.fotoBlob;
+  if (p.sistemaDados) target.sistemaDados = p.sistemaDados;
 
   try {
     await idbPut('registros', target);
@@ -1930,6 +2161,8 @@ function openDetailSheet(id){
     ? `<img class="photo-thumb" style="width:100%;height:220px;" src="${r.foto}" alt="Foto do item">`
     : '';
 
+  const sistemaBox = r.sistemaDados ? `<div class="sistema-box">${renderSistemaDadosHtml(r.sistemaDados)}</div>` : '';
+
   openSheet(`
     <div class="sheet-title-row">
       <h2>Detalhes do item</h2>
@@ -1949,6 +2182,7 @@ function openDetailSheet(id){
       <input type="text" id="dLocal" value="${escapeHtml(r.local || '')}">
     </div>
     ${linkBtn}
+    ${sistemaBox}
     <div class="field">
       <label>Registrado em</label>
       <div class="hint" style="margin-top:0;">${escapeHtml(nowLabel(r.criadoEm))}</div>
@@ -2140,12 +2374,19 @@ function bindExportUI(){
 }
 
 function buildCsvString(){
-  const header = ['patrimonio', 'descricao', 'tipo_codigo', 'valor_lido', 'link', 'local', 'registrado_em', 'atualizado_em'];
+  const header = [
+    'patrimonio', 'descricao', 'tipo_codigo', 'valor_lido', 'link', 'local', 'registrado_em', 'atualizado_em',
+    'sistema_unidade', 'sistema_departamento', 'sistema_responsavel', 'sistema_categoria',
+    'sistema_estado_conservacao', 'sistema_lote'
+  ];
   const lines = [header.join(';')];
   for (const r of state.registros) {
+    const s = r.sistemaDados || {};
     lines.push([
       r.patrimonio || '', r.descricao || '', r.tipo || '', r.valorBruto || '',
-      r.link || '', r.local || '', r.criadoEm || '', r.atualizadoEm || ''
+      r.link || '', r.local || '', r.criadoEm || '', r.atualizadoEm || '',
+      s.unidade || '', s.departamento || '', s.responsavel || '', s.categoria || '',
+      s.estadoConservacao || '', s.lote || ''
     ].map(csvEscape).join(';'));
   }
   return '﻿' + lines.join('\r\n');
