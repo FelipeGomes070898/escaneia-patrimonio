@@ -2,14 +2,14 @@
 // Estratégia simples: cache-first com atualização em segundo plano,
 // para o app abrir instantaneamente e funcionar offline em campo.
 
-const CACHE_NAME = 'escaneia-patrimonio-v1';
+const CACHE_NAME = 'escaneia-patrimonio-v2';
 const CORE_ASSETS = [
   './',
   './index.html',
   './manifest.json',
-  './icon-192.png',
-  './icon-512.png',
-  './apple-touch-icon.png'
+  './icon192.png',
+  './icon512.png',
+  './appletouchicon.png'
 ];
 
 self.addEventListener('install', (event) => {
