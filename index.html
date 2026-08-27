@@ -1810,13 +1810,13 @@ function onScanSuccess(decodedText, decodedResult){
   try { state.html5Qrcode.pause(true); } catch (e) {}
 
   const parsed = parseCodigo(decodedText, formatName);
-  const fotoBlob = captureFrame();
+  const fotoRaw = captureFrame();
 
   const existing = parsed.patrimonio
     ? state.registros.find(r => r.patrimonioKey && r.patrimonioKey === patKey(parsed.patrimonio))
     : null;
 
-  state.pendingScan = { parsed, fotoBlob, existingRecord: existing || null };
+  state.pendingScan = { parsed, fotoRaw, fotoBlob: fotoRaw, existingRecord: existing || null };
   renderConfirmSheet();
 }
 
@@ -1833,6 +1833,62 @@ function captureFrame(){
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     return canvas.toDataURL('image/jpeg', 0.75);
   } catch (e) { return null; }
+}
+
+/** Desenha uma faixa com o número do patrimônio sobre a foto capturada,
+ *  para que o tombo fique bem visível ao rever/exportar as fotos depois. */
+function drawPatrimonioBanner(ctx, w, h, label){
+  const fontSize = Math.max(20, Math.round(w * 0.075));
+  ctx.font = `700 ${fontSize}px 'Public Sans', Arial, sans-serif`;
+  const paddingX = Math.round(fontSize * 0.55);
+  const paddingY = Math.round(fontSize * 0.5);
+  const bannerH = fontSize + paddingY * 2;
+
+  ctx.fillStyle = 'rgba(6,14,13,0.72)';
+  ctx.fillRect(0, h - bannerH, w, bannerH);
+
+  ctx.fillStyle = '#5FF0DD';
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'left';
+  ctx.font = `700 ${fontSize}px 'Public Sans', Arial, sans-serif`;
+  ctx.fillText(label, paddingX, h - bannerH / 2 + 1);
+}
+
+/** Recebe a foto crua (dataURL) e devolve uma cópia com o número do
+ *  patrimônio estampado por cima, em faixa bem legível. */
+function stampImageDataUrl(dataUrl, label){
+  return new Promise((resolve) => {
+    if (!dataUrl || !label) { resolve(dataUrl); return; }
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth || img.width;
+        canvas.height = img.naturalHeight || img.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        drawPatrimonioBanner(ctx, canvas.width, canvas.height, label);
+        resolve(canvas.toDataURL('image/jpeg', 0.82));
+      } catch (e) { resolve(dataUrl); }
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
+/** Reestampa a foto pendente com o valor atual do campo de patrimônio
+ *  (chamada ao digitar, ao tirar outra foto, e quando o sistema traz o
+ *  número oficial automaticamente). */
+async function updatePhotoStamp(){
+  const ps = state.pendingScan;
+  if (!ps || !ps.fotoRaw) return;
+  const patInput = document.getElementById('fPatrimonio');
+  const label = ((patInput ? patInput.value : '') || ps.parsed.patrimonio || '').trim();
+  const stamped = await stampImageDataUrl(ps.fotoRaw, label);
+  if (!state.pendingScan || state.pendingScan !== ps) return; // descartado/trocado nesse meio tempo
+  ps.fotoBlob = stamped;
+  const img = document.getElementById('pendingPhoto');
+  if (img) img.src = stamped;
 }
 
 /* ---------------------------------------------------------------------
@@ -1921,6 +1977,13 @@ function renderConfirmSheet(){
   document.getElementById('btnDiscardScan').addEventListener('click', discardPendingScan);
   document.getElementById('btnSaveScan').addEventListener('click', saveScannedRecord);
 
+  let stampTimer = null;
+  document.getElementById('fPatrimonio').addEventListener('input', () => {
+    clearTimeout(stampTimer);
+    stampTimer = setTimeout(updatePhotoStamp, 350);
+  });
+
+  updatePhotoStamp();
   if (parsed.link) loadSistemaDados(parsed.link);
 }
 
@@ -1945,6 +2008,7 @@ async function loadSistemaDados(url){
     const patInput = document.getElementById('fPatrimonio');
     if (patInput && result.data.tombamento) {
       patInput.value = formatPatrimonio(result.data.tombamento);
+      updatePhotoStamp();
     }
   } else {
     boxEl.innerHTML = `
@@ -1996,8 +2060,10 @@ function renderSistemaDadosHtml(d){
 function retakePhoto(){
   const dataUrl = captureFrame();
   if (dataUrl) {
+    state.pendingScan.fotoRaw = dataUrl;
     state.pendingScan.fotoBlob = dataUrl;
     document.getElementById('pendingPhoto').src = dataUrl;
+    updatePhotoStamp();
     toast('Foto atualizada');
   } else {
     toast('Não foi possível capturar a foto agora.');
@@ -2015,6 +2081,10 @@ async function saveScannedRecord(){
   if (!p) return;
 
   const patrimonioRaw = document.getElementById('fPatrimonio').value.trim();
+  // garante que a faixa na foto reflita exatamente o número que está sendo salvo
+  if (p.fotoRaw) {
+    p.fotoBlob = await stampImageDataUrl(p.fotoRaw, patrimonioRaw);
+  }
   const descricao = document.getElementById('fDescricao').value.trim();
   const local = document.getElementById('fLocal').value.trim();
   const saveAsNewCb = document.getElementById('cbSaveAsNew');
