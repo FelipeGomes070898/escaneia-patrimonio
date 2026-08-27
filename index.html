@@ -289,6 +289,32 @@
     display:flex;
     gap:8px;
   }
+
+  .manual-entry-btn{
+    position:absolute;
+    left:0;right:0;
+    bottom:64px;
+    z-index:6;
+    display:flex;
+    justify-content:center;
+    pointer-events:none;
+  }
+  .manual-entry-btn button{
+    pointer-events:auto;
+    display:flex;
+    align-items:center;
+    gap:7px;
+    background:rgba(8,18,17,0.72);
+    color:#EFFAF8;
+    border:1px solid rgba(239,250,248,0.22);
+    font-size:12.5px;
+    font-weight:600;
+    padding:8px 15px;
+    border-radius:100px;
+    backdrop-filter:blur(3px);
+    cursor:pointer;
+  }
+  .manual-entry-btn svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2;flex:none;}
   .icon-btn{
     width:40px;height:40px;
     border-radius:100px;
@@ -921,6 +947,13 @@
 
         <div id="scanHint" class="scan-hint" style="display:none;">
           <span id="scanHintText">Aponte para o QR Code ou código de barras</span>
+        </div>
+
+        <div class="manual-entry-btn">
+          <button type="button" id="btnManualEntry">
+            <svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M6 9h.01M10 9h.01M14 9h.01M18 9h.01M6 13h.01M10 13h.01M14 13h.01M18 13h.01M8 17h8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Digitar número do patrimônio
+          </button>
         </div>
 
         <div id="permissionCard" class="permission-card">
@@ -1561,6 +1594,7 @@ function bindScannerUI(){
   document.getElementById('btnStartCam').addEventListener('click', startScanner);
   document.getElementById('btnTorch').addEventListener('click', toggleTorch);
   document.getElementById('btnSwitchCam').addEventListener('click', switchCamera);
+  document.getElementById('btnManualEntry').addEventListener('click', openManualEntrySheet);
   document.getElementById('btnRecheckPerm').addEventListener('click', startScanner);
   document.getElementById('btnCopyChromeUrl').addEventListener('click', copyChromeSettingsUrl);
 }
@@ -1807,17 +1841,82 @@ function onScanSuccess(decodedText, decodedResult){
   try { formatName = decodedResult.result.format.formatName; } catch (e) {}
 
   vibrate(60);
+  const parsed = parseCodigo(decodedText, formatName);
+  beginPendingScan(parsed);
+}
+
+/** Ponto único que inicia a tela de confirmação — usado tanto para leituras
+ *  de câmera (QR/código de barras) quanto para o número digitado manualmente. */
+function beginPendingScan(parsed){
+  if (state.pendingScan) return;
   try { state.html5Qrcode.pause(true); } catch (e) {}
 
-  const parsed = parseCodigo(decodedText, formatName);
   const fotoRaw = captureFrame();
-
   const existing = parsed.patrimonio
     ? state.registros.find(r => r.patrimonioKey && r.patrimonioKey === patKey(parsed.patrimonio))
     : null;
 
   state.pendingScan = { parsed, fotoRaw, fotoBlob: fotoRaw, existingRecord: existing || null };
   renderConfirmSheet();
+}
+
+/** Sheet para digitar o número do patrimônio na mão, para quando a etiqueta
+ *  estiver danificada, suja ou o código não estiver legível pela câmera. */
+function openManualEntrySheet(){
+  if (state.pendingScan) return;
+  try { state.html5Qrcode && state.html5Qrcode.pause(true); } catch (e) {}
+
+  openSheet(`
+    <h2>Digitar número do patrimônio</h2>
+    <p style="font-size:13px;line-height:1.5;color:var(--text-muted);margin:-4px 0 16px;">
+      Use quando a etiqueta estiver danificada ou o código não estiver legível pela câmera.
+      A foto do item continua sendo capturada normalmente.
+    </p>
+    <div class="field">
+      <label for="fManualPatrimonio">Número de patrimônio</label>
+      <input type="text" id="fManualPatrimonio" inputmode="numeric" placeholder="Ex.: 031.290.158" autocomplete="off">
+      <div class="hint">Digite só os números — a formatação com pontos é automática.</div>
+    </div>
+    <div class="sheet-actions">
+      <button class="btn btn-ghost" id="btnManualCancel" type="button">Cancelar</button>
+      <button class="btn btn-primary" id="btnManualConfirm" type="button">Buscar item</button>
+    </div>
+  `);
+
+  const input = document.getElementById('fManualPatrimonio');
+  input.addEventListener('input', () => {
+    const caretAtEnd = input.selectionStart === input.value.length;
+    input.value = formatPatrimonio(onlyDigits(input.value));
+    if (caretAtEnd) input.setSelectionRange(input.value.length, input.value.length);
+  });
+  setTimeout(() => input.focus(), 50);
+
+  const confirmManual = () => {
+    const digits = onlyDigits(input.value);
+    if (digits.length < 4) {
+      toast('Digite o número completo do patrimônio.');
+      return;
+    }
+    const formatted = formatPatrimonio(digits);
+    const parsed = {
+      tipo: 'Digitado manualmente',
+      valorBruto: formatted,
+      patrimonio: formatted,
+      link: `https://e-estado.ro.gov.br/publico/bens/${patKey(formatted)}`,
+      descricaoSugerida: ''
+    };
+    closeSheet();
+    beginPendingScan(parsed);
+  };
+
+  document.getElementById('btnManualCancel').addEventListener('click', () => {
+    closeSheet();
+    resumeScannerIfNeeded();
+  });
+  document.getElementById('btnManualConfirm').addEventListener('click', confirmManual);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); confirmManual(); }
+  });
 }
 
 function captureFrame(){
