@@ -715,6 +715,26 @@
     cursor:pointer;
   }
   .chip.active{background:var(--accent);border-color:var(--accent);color:var(--accent-text-on);}
+  .chip-row-label{
+    font-size:11.5px;
+    font-weight:600;
+    color:var(--text-muted);
+    margin:-6px 0 7px;
+  }
+  .chip-row-semtombo{margin-bottom:14px;}
+  .chip-outline{
+    background:transparent;
+    border-style:dashed;
+  }
+  .chip-outline.active{background:var(--accent);border-style:solid;border-color:var(--accent);color:var(--accent-text-on);}
+
+  .loc-folder-chip{display:inline-flex;align-items:center;gap:6px;}
+  .loc-new-chip{
+    background:transparent;
+    border-style:dashed;
+    border-color:var(--accent);
+    color:var(--accent);
+  }
 
   .sheet-actions{
     display:flex;
@@ -1440,51 +1460,82 @@ function addLocalCustom(nome){
   }
 }
 
-/** Monta o menu suspenso de local/sala, com opção de digitar um local novo. */
+const FOLDER_ICON_SVG = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+/** Monta o seletor de local/sala como "pastilhas" (uma por sala já usada),
+ *  pra escolher com um toque só, mais um botão pra criar uma sala nova. */
 function renderLocalFieldHtml(idPrefix, selected){
   const opts = getLocaisList();
-  const isCustomSelected = !!selected && !opts.includes(selected);
-  const optionsHtml = opts.map(o =>
-    `<option value="${escapeHtml(o)}" ${o === selected ? 'selected' : ''}>${escapeHtml(o)}</option>`
+  const chipsHtml = opts.map(o =>
+    `<button type="button" class="chip loc-folder-chip ${o === selected ? 'active' : ''}" data-loc="${escapeHtml(o)}">${FOLDER_ICON_SVG}${escapeHtml(o)}</button>`
   ).join('');
   return `
     <div class="field text-normal">
-      <label for="${idPrefix}Select">Local / sala</label>
-      <select id="${idPrefix}Select">
-        <option value="">Selecione um local…</option>
-        ${optionsHtml}
-        <option value="__custom__" ${isCustomSelected ? 'selected' : ''}>+ Outro local (digitar)</option>
-      </select>
-      <input type="text" id="${idPrefix}Custom" placeholder="Digite o nome do local"
-        value="${isCustomSelected ? escapeHtml(selected) : ''}"
-        style="margin-top:8px;${isCustomSelected ? '' : 'display:none;'}">
+      <label>Local / sala</label>
+      <input type="hidden" id="${idPrefix}Value" value="${escapeHtml(selected || '')}">
+      <div class="chip-row" id="${idPrefix}Chips">
+        ${chipsHtml}
+        <button type="button" class="chip loc-new-chip" id="${idPrefix}NewBtn">+ Nova sala</button>
+      </div>
+      <input type="text" id="${idPrefix}NewInput" placeholder="Nome da nova sala (ex.: Sala do GALD)" style="margin-top:8px;display:none;">
     </div>`;
 }
 
-/** Liga o comportamento do menu suspenso de local (mostra o campo de texto
- *  quando "+ Outro local" é escolhido). Chamar depois de inserir o HTML. */
+/** Liga os toques nas pastilhas de local e o botão de criar sala nova.
+ *  Chamar depois de inserir o HTML de renderLocalFieldHtml. */
 function bindLocalFieldEvents(idPrefix){
-  const sel = document.getElementById(idPrefix + 'Select');
-  const custom = document.getElementById(idPrefix + 'Custom');
-  if (!sel || !custom) return;
-  sel.addEventListener('change', () => {
-    if (sel.value === '__custom__') {
-      custom.style.display = '';
-      custom.focus();
-    } else {
-      custom.style.display = 'none';
-    }
+  const chipRow = document.getElementById(idPrefix + 'Chips');
+  const hidden = document.getElementById(idPrefix + 'Value');
+  const newBtn = document.getElementById(idPrefix + 'NewBtn');
+  const newInput = document.getElementById(idPrefix + 'NewInput');
+  if (!chipRow || !hidden) return;
+
+  function selectLocal(value){
+    hidden.value = value;
+    chipRow.querySelectorAll('.loc-folder-chip').forEach(c => {
+      c.classList.toggle('active', c.dataset.loc === value);
+    });
+  }
+
+  chipRow.querySelectorAll('.loc-folder-chip').forEach(chip => {
+    chip.addEventListener('click', () => selectLocal(chip.dataset.loc));
   });
+
+  if (!newBtn || !newInput) return;
+
+  const confirmNewLocal = () => {
+    const name = newInput.value.trim();
+    newInput.style.display = 'none';
+    if (!name) return;
+    addLocalCustom(name);
+    if (!chipRow.querySelector(`.loc-folder-chip[data-loc="${CSS.escape(name)}"]`)) {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'chip loc-folder-chip';
+      chip.dataset.loc = name;
+      chip.innerHTML = FOLDER_ICON_SVG + escapeHtml(name);
+      chip.addEventListener('click', () => selectLocal(name));
+      chipRow.insertBefore(chip, newBtn);
+    }
+    selectLocal(name);
+    newInput.value = '';
+  };
+
+  newBtn.addEventListener('click', () => {
+    const showing = newInput.style.display !== 'none';
+    newInput.style.display = showing ? 'none' : '';
+    if (!showing) newInput.focus();
+  });
+  newInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); confirmNewLocal(); }
+  });
+  newInput.addEventListener('blur', confirmNewLocal);
 }
 
-/** Lê o valor final do campo de local (do select, ou do texto digitado). */
+/** Lê o valor final do campo de local (a pastilha selecionada). */
 function readLocalFieldValue(idPrefix){
-  const sel = document.getElementById(idPrefix + 'Select');
-  if (!sel) return '';
-  if (sel.value === '__custom__') {
-    return (document.getElementById(idPrefix + 'Custom').value || '').trim();
-  }
-  return sel.value || '';
+  const hidden = document.getElementById(idPrefix + 'Value');
+  return hidden ? hidden.value.trim() : '';
 }
 
 /* ---------------------------------------------------------------------
@@ -1699,7 +1750,9 @@ document.addEventListener('DOMContentLoaded', init);
 // offline depois da primeira visita (não interfere caso não seja suportado).
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    navigator.serviceWorker.register('sw.js')
+      .then((reg) => { reg.update().catch(() => {}); }) // força checar por versão nova a cada abertura
+      .catch(() => {});
   });
 }
 
@@ -2222,6 +2275,7 @@ function renderConfirmSheet(){
     </div>` : '';
 
   const chips = ['Cadeira','Mesa','Monitor','Computador','Teclado','Mouse','Impressora','Armário','Ventilador','Ar-condicionado','Bebedouro','Estante'];
+  const chipsSemTombo = chips.map(c => c + ' s/T');
 
   openSheet(`
     <div class="photo-hero">
@@ -2248,6 +2302,10 @@ function renderConfirmSheet(){
     <div class="chip-row" id="descChips">
       ${chips.map(c => `<button type="button" class="chip" data-val="${escapeHtml(c)}">${escapeHtml(c)}</button>`).join('')}
     </div>
+    <div class="chip-row-label">Item sem etiqueta/tombo?</div>
+    <div class="chip-row chip-row-semtombo" id="descChipsSemTombo">
+      ${chipsSemTombo.map(c => `<button type="button" class="chip chip-outline" data-val="${escapeHtml(c)}">${escapeHtml(c)}</button>`).join('')}
+    </div>
     ${renderLocalFieldHtml('fLocal', ultimoLocal)}
     ${sistemaBox}
     ${linkBtn}
@@ -2262,10 +2320,10 @@ function renderConfirmSheet(){
   document.getElementById('btnToggleRaw').addEventListener('click', (e) => {
     document.getElementById('rawValueBox').classList.toggle('show');
   });
-  document.querySelectorAll('#descChips .chip').forEach(chip => {
+  document.querySelectorAll('#descChips .chip, #descChipsSemTombo .chip').forEach(chip => {
     chip.addEventListener('click', () => {
       document.getElementById('fDescricao').value = chip.dataset.val;
-      document.querySelectorAll('#descChips .chip').forEach(c => c.classList.remove('active'));
+      document.querySelectorAll('#descChips .chip, #descChipsSemTombo .chip').forEach(c => c.classList.remove('active'));
       chip.classList.add('active');
     });
   });
