@@ -1976,6 +1976,24 @@ function detectPlatformCameraBlock(){
 }
 
 async function startScanner(){
+  // Trava contra chamadas simultâneas — se o botão for tocado duas vezes
+  // rápido (ou alguma outra parte do app chamar de novo enquanto a câmera
+  // ainda está no meio de abrir), a biblioteca de leitura quebra com
+  // "already under transition". Ignora a segunda chamada em vez de deixar
+  // isso acontecer.
+  if (state.scannerStarting) return;
+  state.scannerStarting = true;
+  const btnStart = document.getElementById('btnStartCam');
+  if (btnStart) btnStart.disabled = true;
+  try {
+    await startScannerInner();
+  } finally {
+    state.scannerStarting = false;
+    if (btnStart) btnStart.disabled = false;
+  }
+}
+
+async function startScannerInner(){
   hideCamMessages();
 
   if (!window.isSecureContext) {
