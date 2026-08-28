@@ -527,6 +527,33 @@
     justify-content:center;
   }
 
+  .photo-hero{
+    position:relative;
+    width:100%;
+    border-radius:var(--radius-md);
+    overflow:hidden;
+    background:var(--surface-2);
+    border:1px solid var(--border);
+    margin:6px 0 4px;
+  }
+  .photo-hero-img{
+    display:block;
+    width:100%;
+    height:min(52vh, 320px);
+    object-fit:cover;
+    background:var(--surface-2);
+  }
+  .photo-hero-retake{
+    position:absolute;
+    right:10px;bottom:10px;
+    background:rgba(8,18,17,0.72);
+    color:#EFFAF8;
+    border:1px solid rgba(239,250,248,0.22);
+    backdrop-filter:blur(3px);
+    padding:8px 14px;
+    font-size:12.5px;
+  }
+
   .field{margin-bottom:14px;}
   .field label{
     display:block;
@@ -1545,7 +1572,7 @@ function parseSistemaBens(html){
 // URL do proxy próprio (Cloudflare Worker) usado para contornar o bloqueio de
 // CORS do sistema do governo — sem isso, o navegador nunca deixa o app buscar
 // os dados sozinho. Preencher depois de criar o Worker (ver instruções enviadas).
-const SISTEMA_PROXY_BASE = '';
+const SISTEMA_PROXY_BASE = 'https://winter-base-610f.felipegc098.workers.dev';
 
 async function fetchSistemaDados(url){
   if (!SISTEMA_PROXY_BASE) {
@@ -1900,7 +1927,14 @@ async function startScanner(){
     };
 
     await state.html5Qrcode.start(
-      { facingMode: state.facingMode },
+      {
+        facingMode: state.facingMode,
+        // resolução mais alta e foco contínuo — a foto do tombo precisa sair nítida,
+        // não só o suficiente pra decodificar o código.
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
+        advanced: [{ focusMode: 'continuous' }]
+      },
       config,
       onScanSuccess,
       () => {} // falha silenciosa por frame (sem código detectado ainda)
@@ -2083,13 +2117,17 @@ function captureFrame(){
     const video = document.querySelector('#reader video');
     if (!video || !video.videoWidth) return null;
     const canvas = document.getElementById('captureCanvas');
-    const maxW = 900;
+    // Resolução alta o bastante pra ler o número do tombo com nitidez depois
+    // (na tela e nas fotos exportadas), sem downscaling agressivo.
+    const maxW = 1600;
     const scale = Math.min(1, maxW / video.videoWidth);
     canvas.width = Math.round(video.videoWidth * scale);
     canvas.height = Math.round(video.videoHeight * scale);
     const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    return canvas.toDataURL('image/jpeg', 0.75);
+    return canvas.toDataURL('image/jpeg', 0.92);
   } catch (e) { return null; }
 }
 
@@ -2124,9 +2162,11 @@ function stampImageDataUrl(dataUrl, label){
         canvas.width = img.naturalWidth || img.width;
         canvas.height = img.naturalHeight || img.height;
         const ctx = canvas.getContext('2d');
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
         drawPatrimonioBanner(ctx, canvas.width, canvas.height, label);
-        resolve(canvas.toDataURL('image/jpeg', 0.82));
+        resolve(canvas.toDataURL('image/jpeg', 0.92));
       } catch (e) { resolve(dataUrl); }
     };
     img.onerror = () => resolve(dataUrl);
@@ -2184,17 +2224,18 @@ function renderConfirmSheet(){
   const chips = ['Cadeira','Mesa','Monitor','Computador','Teclado','Mouse','Impressora','Armário','Ventilador','Ar-condicionado','Bebedouro','Estante'];
 
   openSheet(`
+    <div class="photo-hero">
+      <img class="photo-hero-img" id="pendingPhoto" src="${fotoBlob || ''}" alt="Foto capturada do item">
+      <button class="btn photo-hero-retake" id="btnRetake" type="button">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6" stroke-linecap="round" stroke-linejoin="round"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Tirar outra foto
+      </button>
+    </div>
     <div class="sheet-title-row">
       <h2>Confirmar item</h2>
       <span class="type-chip">${escapeHtml(parsed.tipo)}</span>
     </div>
     ${dupBanner}
-    <div class="photo-row">
-      <img class="photo-thumb" id="pendingPhoto" src="${fotoBlob || ''}" alt="Foto capturada do item">
-      <div class="photo-actions">
-        <button class="btn btn-ghost" id="btnRetake" type="button">Tirar outra foto</button>
-      </div>
-    </div>
     <div class="field">
       <label for="fPatrimonio">Número de patrimônio</label>
       <input type="text" id="fPatrimonio" inputmode="numeric" value="${escapeHtml(parsed.patrimonio)}" placeholder="Ex.: 000.618.424">
