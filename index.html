@@ -2254,8 +2254,14 @@ function resumeScannerIfNeeded(){
 /* ---------------------------------------------------------------------
    Resultado da leitura
    --------------------------------------------------------------------- */
+// Trava um instante mais cedo que state.pendingScan: fica true assim que uma
+// leitura é detectada, até a foto (com a espera de foco) terminar de ser
+// tirada — evita que outra leitura ou o botão de digitar entrem no meio
+// dessa janela, já que state.pendingScan só é preenchido no final dela.
+let acquiringScan = false;
+
 function onScanSuccess(decodedText, decodedResult){
-  if (state.pendingScan) return; // já tratando uma leitura, ignora leituras extras
+  if (state.pendingScan || acquiringScan) return; // já tratando uma leitura, ignora leituras extras
   let formatName = 'QR_CODE';
   try { formatName = decodedResult.result.format.formatName; } catch (e) {}
 
@@ -2265,24 +2271,33 @@ function onScanSuccess(decodedText, decodedResult){
 }
 
 /** Ponto único que inicia a tela de confirmação — usado tanto para leituras
- *  de câmera (QR/código de barras) quanto para o número digitado manualmente. */
-function beginPendingScan(parsed){
-  if (state.pendingScan) return;
-  try { state.html5Qrcode.pause(true); } catch (e) {}
+ *  de câmera (QR/código de barras) quanto para o número digitado manualmente.
+ *  Espera um instante pra pegar um quadro nítido antes de pausar a câmera e
+ *  guardar o registro pendente — só registra quando estiver focado. */
+async function beginPendingScan(parsed){
+  if (state.pendingScan || acquiringScan) return;
+  acquiringScan = true;
 
-  const fotoRaw = captureFrame();
+  let fotoRaw;
+  try {
+    fotoRaw = await captureBestFocusedFrame();
+  } finally {
+    try { state.html5Qrcode.pause(true); } catch (e) {}
+  }
+
   const existing = parsed.patrimonio
     ? state.registros.find(r => r.patrimonioKey && r.patrimonioKey === patKey(parsed.patrimonio))
     : null;
 
   state.pendingScan = { parsed, fotoRaw, fotoBlob: fotoRaw, existingRecord: existing || null };
+  acquiringScan = false;
   renderConfirmSheet();
 }
 
 /** Sheet para digitar o número do patrimônio na mão, para quando a etiqueta
  *  estiver danificada, suja ou o código não estiver legível pela câmera. */
 function openManualEntrySheet(){
-  if (state.pendingScan) return;
+  if (state.pendingScan || acquiringScan) return;
   try { state.html5Qrcode && state.html5Qrcode.pause(true); } catch (e) {}
 
   openSheet(`
@@ -2355,6 +2370,67 @@ function captureFrame(){
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     return canvas.toDataURL('image/jpeg', 0.92);
   } catch (e) { return null; }
+}
+
+/** Mede o quanto o quadro atual do vídeo está nítido (variância do
+ *  Laplaciano — método clássico de detecção de desfoque: quanto maior,
+ *  mais nítida a imagem). Calculado numa amostra pequena, então é rápido. */
+function computeSharpness(video){
+  const w = 160, h = 120;
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(video, 0, 0, w, h);
+  const data = ctx.getImageData(0, 0, w, h).data;
+
+  const gray = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) {
+    gray[i] = 0.299 * data[i * 4] + 0.587 * data[i * 4 + 1] + 0.114 * data[i * 4 + 2];
+  }
+
+  let sum = 0, sumSq = 0, n = 0;
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const idx = y * w + x;
+      const lap = 4 * gray[idx] - gray[idx - 1] - gray[idx + 1] - gray[idx - w] - gray[idx + w];
+      sum += lap;
+      sumSq += lap * lap;
+      n++;
+    }
+  }
+  const mean = sum / n;
+  return (sumSq / n) - (mean * mean);
+}
+
+/** Espera um instante curtinho amostrando a nitidez de alguns quadros
+ *  seguidos da câmera ao vivo, e guarda o mais nítido deles — evita
+ *  registrar a foto bem no instante em que a câmera ainda está ajustando o
+ *  foco (o código pode ser lido antes da imagem terminar de focar).
+ *  Se o vídeo já estiver pausado (sem imagem nova chegando), tira só uma
+ *  foto na hora, sem esperar à toa. */
+async function captureBestFocusedFrame(){
+  const video = document.querySelector('#reader video');
+  if (!video || !video.videoWidth) return captureFrame();
+  if (video.paused) return captureFrame();
+
+  const ATTEMPTS = 4;
+  const INTERVAL_MS = 150;
+  let bestScore = -Infinity;
+  let bestFrame = null;
+
+  for (let i = 0; i < ATTEMPTS; i++) {
+    if (!video.videoWidth || video.paused) break;
+    try {
+      const score = computeSharpness(video);
+      if (score > bestScore) {
+        bestScore = score;
+        bestFrame = captureFrame();
+      }
+    } catch (e) { /* ignora uma amostra ruim e segue tentando */ }
+    if (i < ATTEMPTS - 1) await new Promise((r) => setTimeout(r, INTERVAL_MS));
+  }
+
+  return bestFrame || captureFrame();
 }
 
 /** Desenha uma faixa com o número do patrimônio sobre a foto capturada,
@@ -2585,16 +2661,28 @@ function renderSistemaDadosHtml(d){
     </div>`;
 }
 
-function retakePhoto(){
-  const dataUrl = captureFrame();
-  if (dataUrl) {
-    state.pendingScan.fotoRaw = dataUrl;
-    state.pendingScan.fotoBlob = dataUrl;
-    document.getElementById('pendingPhoto').src = dataUrl;
-    updatePhotoStamp();
-    toast('Foto atualizada');
-  } else {
-    toast('Não foi possível capturar a foto agora.');
+async function retakePhoto(){
+  const btn = document.getElementById('btnRetake');
+  if (btn) btn.disabled = true;
+  try {
+    // a câmera fica pausada (congelada) por trás da tela de confirmação —
+    // retoma um instante pra pegar uma imagem viva de novo antes de tirar a foto.
+    try { state.html5Qrcode.resume(); } catch (e) {}
+    await new Promise((r) => setTimeout(r, 120));
+    const dataUrl = await captureBestFocusedFrame();
+    try { state.html5Qrcode.pause(true); } catch (e) {}
+
+    if (dataUrl) {
+      state.pendingScan.fotoRaw = dataUrl;
+      state.pendingScan.fotoBlob = dataUrl;
+      document.getElementById('pendingPhoto').src = dataUrl;
+      updatePhotoStamp();
+      toast('Foto atualizada');
+    } else {
+      toast('Não foi possível capturar a foto agora.');
+    }
+  } finally {
+    if (btn) btn.disabled = false;
   }
 }
 
