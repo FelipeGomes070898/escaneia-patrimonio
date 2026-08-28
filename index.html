@@ -2052,18 +2052,22 @@ async function startScannerInner(){
     };
 
     await state.html5Qrcode.start(
-      {
-        facingMode: state.facingMode,
-        // resolução mais alta e foco contínuo — a foto do tombo precisa sair nítida,
-        // não só o suficiente pra decodificar o código.
-        width: { ideal: 1920 },
-        height: { ideal: 1080 },
-        advanced: [{ focusMode: 'continuous' }]
-      },
+      { facingMode: state.facingMode }, // esse objeto só aceita 1 chave — não dá pra somar mais nada aqui
       config,
       onScanSuccess,
       () => {} // falha silenciosa por frame (sem código detectado ainda)
     );
+
+    // resolução mais alta e foco contínuo — aplicados depois de iniciar, pra
+    // foto do tombo sair nítida (não só o suficiente pra decodificar o código).
+    // Se o aparelho não aceitar mudar isso, ignora e segue com o padrão.
+    try {
+      await state.html5Qrcode.applyVideoConstraints({
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
+        advanced: [{ focusMode: 'continuous' }]
+      });
+    } catch (e) {}
 
     state.scannerRunning = true;
     document.getElementById('permissionCard').style.display = 'none';
