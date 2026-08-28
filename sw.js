@@ -1,8 +1,13 @@
 // Service worker do "Escaneia Patrimônio"
-// Estratégia simples: cache-first com atualização em segundo plano,
-// para o app abrir instantaneamente e funcionar offline em campo.
-
-const CACHE_NAME = 'escaneia-patrimonio-v2';
+// Estratégia: network-first (sempre tenta buscar a versão mais nova primeiro),
+// caindo para o cache só quando não há internet — assim o app sempre mostra
+// a versão atual quando publicada, e ainda funciona offline em campo.
+//
+// IMPORTANTE: sempre que os arquivos do app forem atualizados, mude o número
+// no fim de CACHE_NAME (ex.: v3 -> v4). Isso força o navegador a descartar
+// o cache antigo e buscar tudo de novo — sem isso, o app pode continuar
+// mostrando uma versão desatualizada mesmo depois de reenviar os arquivos.
+const CACHE_NAME = 'escaneia-patrimonio-v3';
 const CORE_ASSETS = [
   './',
   './index.html',
@@ -32,17 +37,14 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      const network = fetch(event.request)
-        .then((response) => {
-          if (response && response.status === 200 && response.type === 'basic') {
-            const copy = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
-          }
-          return response;
-        })
-        .catch(() => cached);
-      return cached || network;
-    })
+    fetch(event.request)
+      .then((response) => {
+        if (response && response.status === 200 && response.type === 'basic') {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+        }
+        return response;
+      })
+      .catch(() => caches.match(event.request))
   );
 });
