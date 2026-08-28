@@ -1178,9 +1178,14 @@
     <!-- ===================== REGISTROS ===================== -->
     <section class="view" id="view-list">
       <div class="page">
-        <div class="page-head">
-          <h2>Registros</h2>
-          <p id="listSubtitle">Itens escaneados nesta vistoria</p>
+        <div class="page-head" style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;">
+          <div>
+            <h2>Registros</h2>
+            <p id="listSubtitle">Itens escaneados nesta vistoria</p>
+          </div>
+          <button type="button" id="btnSyncNow" title="Atualizar registros online" style="flex-shrink:0;display:flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:50%;border:1px solid var(--border,#333);background:transparent;color:inherit;">
+            <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-3-6.7" stroke-linecap="round"/><path d="M21 3v6h-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
         </div>
         <input type="text" class="search-input" id="searchInput" placeholder="Buscar por patrimônio, item ou local…">
         <div class="loc-chip-row" id="locChipRow"></div>
@@ -1703,6 +1708,161 @@ async function fetchSistemaDados(url){
   }
 }
 
+/* ---------------------------------------------------------------------
+   Sincronização online (mesmo Cloudflare Worker, agora também guardando
+   os registros numa KV) — deixa os registros visíveis para outros
+   aparelhos, quase em tempo real (checagem periódica, não instantânea).
+   Só a parte "de texto" do registro é enviada (tombo, descrição, local,
+   horário) — a foto continua só no aparelho que tirou a foto, pra manter
+   a sincronização leve e rápida mesmo em conexão fraca de campo.
+   --------------------------------------------------------------------- */
+const SYNC_API = SISTEMA_PROXY_BASE.replace(/\/+$/, '') + '/api/registros';
+const PENDING_SYNC_KEY = 'pendingSyncIds';
+const DEVICE_LABEL_KEY = 'deviceLabel';
+
+function getDeviceLabel(){
+  let label = safeLocalStorageGet(DEVICE_LABEL_KEY);
+  if (!label) {
+    label = ((typeof prompt === 'function' ? prompt('Como identificar este aparelho/pessoa nos registros online? (ex.: "Ana - Escola Municipal X")') : '') || '').trim();
+    if (!label) label = 'Aparelho sem nome';
+    safeLocalStorageSet(DEVICE_LABEL_KEY, label);
+  }
+  return label;
+}
+
+function getPendingSyncIds(){
+  try { return JSON.parse(safeLocalStorageGet(PENDING_SYNC_KEY) || '[]'); } catch (e) { return []; }
+}
+function setPendingSyncIds(ids){ safeLocalStorageSet(PENDING_SYNC_KEY, JSON.stringify(ids)); }
+function addPendingSyncId(id){
+  const ids = getPendingSyncIds();
+  if (!ids.includes(id)) { ids.push(id); setPendingSyncIds(ids); }
+}
+function removePendingSyncId(id){
+  const ids = getPendingSyncIds();
+  const next = ids.filter(x => x !== id);
+  if (next.length !== ids.length) setPendingSyncIds(next);
+}
+
+/** Monta o pacote leve (sem foto) que vai para o servidor. */
+function buildSyncPayload(r){
+  return {
+    id: r.id,
+    tipo: r.tipo || '',
+    patrimonio: r.patrimonio || '',
+    patrimonioKey: r.patrimonioKey || '',
+    descricao: r.descricao || '',
+    local: r.local || '',
+    link: r.link || '',
+    criadoEm: r.criadoEm,
+    atualizadoEm: r.atualizadoEm,
+    dispositivo: getDeviceLabel()
+  };
+}
+
+/** Envia um registro para o servidor. Nunca trava a interface: se falhar
+ *  (sem internet, proxy fora do ar), fica marcado para reenviar depois. */
+async function syncRecordOnline(r){
+  if (!SISTEMA_PROXY_BASE || !r || !r.id) return;
+  try {
+    const resp = await fetch(SYNC_API, {
+      method: 'POST',
+      mode: 'cors',
+      credentials: 'omit',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(buildSyncPayload(r))
+    });
+    if (!resp.ok) throw new Error('http_' + resp.status);
+    removePendingSyncId(r.id);
+  } catch (e) {
+    addPendingSyncId(r.id);
+  }
+}
+
+async function deleteRecordOnline(id){
+  if (!SISTEMA_PROXY_BASE || !id) return;
+  try {
+    await fetch(SYNC_API + '/' + encodeURIComponent(id), { method: 'DELETE', mode: 'cors', credentials: 'omit' });
+  } catch (e) { /* melhor esforço — se falhar, o item só some daqui */ }
+}
+
+/** Reenvia registros que não conseguiram sincronizar antes (por exemplo,
+ *  sem internet no momento do salvamento em campo). */
+let flushingSyncNow = false;
+async function flushPendingSync(){
+  if (flushingSyncNow) return;
+  const ids = getPendingSyncIds();
+  if (!ids.length) return;
+  flushingSyncNow = true;
+  let ok = 0;
+  try {
+    for (const id of ids) {
+      const r = state.registros.find(x => x.id === id);
+      if (!r) { removePendingSyncId(id); continue; }
+      const before = getPendingSyncIds().length;
+      await syncRecordOnline(r);
+      if (getPendingSyncIds().length < before) ok++;
+    }
+  } finally {
+    flushingSyncNow = false;
+  }
+  if (ok > 0) toast(ok === 1 ? '1 registro sincronizado' : (ok + ' registros sincronizados'));
+}
+
+/** Busca a lista compartilhada no servidor e mescla os itens que ainda não
+ *  existem neste aparelho (registrados por outra pessoa). Nunca sobrescreve
+ *  um registro feito neste próprio aparelho — a foto e as edições locais
+ *  ficam sempre preservadas aqui. */
+let syncingNow = false;
+async function pollOnlineRecords(showFeedback){
+  if (!SISTEMA_PROXY_BASE || syncingNow) return;
+  syncingNow = true;
+  try {
+    const resp = await fetch(SYNC_API, { mode: 'cors', credentials: 'omit' });
+    if (!resp.ok) { if (showFeedback) toast('Não foi possível atualizar agora'); return; }
+    const remoteList = await resp.json();
+    if (!Array.isArray(remoteList)) return;
+
+    let changed = false;
+    for (const rem of remoteList) {
+      if (!rem || !rem.id) continue;
+      const idx = state.registros.findIndex(x => x.id === rem.id);
+      if (idx === -1) {
+        const novo = Object.assign({}, rem, { origem: 'online' });
+        state.registros.unshift(novo);
+        try { await idbPut('registros', novo); } catch (e) {}
+        changed = true;
+      } else {
+        const existente = state.registros[idx];
+        if (existente.origem === 'online' && (rem.atualizadoEm || '') > (existente.atualizadoEm || '')) {
+          const atualizado = Object.assign({}, existente, rem, { origem: 'online' });
+          state.registros[idx] = atualizado;
+          try { await idbPut('registros', atualizado); } catch (e) {}
+          changed = true;
+        }
+      }
+    }
+    if (changed) {
+      renderList();
+      renderBaseDashboard();
+      updateCounts();
+    }
+    if (showFeedback) toast(changed ? 'Registros atualizados' : 'Já está tudo atualizado');
+  } catch (e) {
+    if (showFeedback) toast('Sem conexão para atualizar agora');
+  } finally {
+    syncingNow = false;
+  }
+}
+
+function startOnlineSync(){
+  if (!SISTEMA_PROXY_BASE) return;
+  pollOnlineRecords();
+  flushPendingSync();
+  setInterval(() => { pollOnlineRecords(); flushPendingSync(); }, 25000);
+  window.addEventListener('online', () => { pollOnlineRecords(); flushPendingSync(); });
+}
+
 function nowLabel(iso){
   try {
     const d = new Date(iso);
@@ -1828,6 +1988,7 @@ async function init(){
   renderList();
   renderBaseDashboard();
   updateCounts();
+  startOnlineSync();
 }
 
 /* ---------------------------------------------------------------------
@@ -1857,6 +2018,7 @@ function switchTab(tab){
   } else if (state.scannerRunning) {
     pauseScannerSoft();
   }
+  if (tab === 'list') pollOnlineRecords();
 }
 
 /* ---------------------------------------------------------------------
@@ -2709,8 +2871,10 @@ async function saveScannedRecord(){
 
   const target = (p.existingRecord && !forceNew) ? p.existingRecord : {
     id: uid(),
-    criadoEm: new Date().toISOString()
+    criadoEm: new Date().toISOString(),
+    origem: 'local'
   };
+  target.origem = target.origem || 'local';
 
   target.tipo = p.parsed.tipo;
   target.valorBruto = p.parsed.valorBruto;
@@ -2733,6 +2897,8 @@ async function saveScannedRecord(){
 
   const idx = state.registros.findIndex(r => r.id === target.id);
   if (idx >= 0) state.registros[idx] = target; else state.registros.unshift(target);
+
+  syncRecordOnline(target); // em segundo plano — não trava o salvamento local
 
   if (local) safeLocalStorageSet('ultimoLocal', local);
 
@@ -2776,6 +2942,13 @@ function updateCounts(){
    --------------------------------------------------------------------- */
 function bindListUI(){
   document.getElementById('searchInput').addEventListener('input', renderList);
+  const btnSync = document.getElementById('btnSyncNow');
+  if (btnSync) {
+    btnSync.addEventListener('click', () => {
+      btnSync.style.opacity = '0.5';
+      Promise.all([pollOnlineRecords(true), flushPendingSync()]).finally(() => { btnSync.style.opacity = '1'; });
+    });
+  }
 }
 
 function baseStatusFor(rec){
@@ -2826,18 +2999,24 @@ function renderLocChips(){
 function renderRecCardHtml(r){
   const status = baseStatusFor(r);
   const dot = status ? `<span class="status-dot ${status}"></span>` : '';
+  const isOnline = r.origem === 'online';
   const thumb = r.foto
     ? `<img class="th" src="${r.foto}" alt="">`
-    : `<div class="th" style="display:flex;align-items:center;justify-content:center;color:var(--text-muted);">
-         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="7" width="18" height="12" rx="2"/><path d="M8 7V5a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" stroke-linecap="round"/></svg>
+    : `<div class="th" style="display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:18px;">
+         ${isOnline
+            ? '☁️'
+            : '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="7" width="18" height="12" rx="2"/><path d="M8 7V5a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" stroke-linecap="round"/></svg>'}
        </div>`;
+  const onlineBadge = isOnline
+    ? `<span style="margin-left:6px;padding:1px 6px;border-radius:8px;background:rgba(95,240,221,0.15);color:#5FF0DD;font-size:11px;white-space:nowrap;">☁ ${escapeHtml(r.dispositivo || 'outro aparelho')}</span>`
+    : '';
   return `
     <div class="rec-card" data-id="${escapeHtml(r.id)}">
       ${thumb}
       <div class="info">
         <div class="pat">${escapeHtml(r.patrimonio || 'Sem número')}</div>
         <div class="desc">${escapeHtml(r.descricao || 'Sem descrição')}${r.local ? ' · ' + escapeHtml(r.local) : ''}</div>
-        <div class="meta">${dot}${escapeHtml(nowLabel(r.atualizadoEm || r.criadoEm))}</div>
+        <div class="meta">${dot}${escapeHtml(nowLabel(r.atualizadoEm || r.criadoEm))}${onlineBadge}</div>
       </div>
     </div>`;
 }
@@ -2918,7 +3097,9 @@ function openDetailSheet(id){
 
   const photo = r.foto
     ? `<img class="photo-thumb" style="width:100%;height:220px;" src="${r.foto}" alt="Foto do item">`
-    : '';
+    : (r.origem === 'online'
+        ? `<div class="hint" style="margin:2px 0 14px;">☁ Este item foi registrado em outro aparelho${r.dispositivo ? ' (' + escapeHtml(r.dispositivo) + ')' : ''}. A foto fica só no aparelho que fez o registro.</div>`
+        : '');
 
   const sistemaBox = r.sistemaDados ? `<div class="sistema-box">${renderSistemaDadosHtml(r.sistemaDados)}</div>` : '';
 
@@ -2971,6 +3152,7 @@ async function saveDetailEdits(id){
   try {
     await idbPut('registros', r);
     toast('Alterações salvas');
+    syncRecordOnline(r); // em segundo plano
   } catch (e) {
     toast('Erro ao salvar alterações');
   }
@@ -2985,6 +3167,8 @@ async function deleteRecord(id){
     await idbDelete('registros', id);
   } catch (e) {}
   state.registros = state.registros.filter(r => r.id !== id);
+  removePendingSyncId(id);
+  deleteRecordOnline(id); // em segundo plano
   closeSheet();
   renderList();
   renderBaseDashboard();
