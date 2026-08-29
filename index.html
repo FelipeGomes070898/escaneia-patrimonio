@@ -1070,6 +1070,45 @@
     background:var(--danger-soft);
   }
   .danger-zone p{font-size:12.5px;color:var(--danger);margin:0 0 10px;line-height:1.5;}
+
+  /* ---------------------------------------------------------------------
+     Modo computador — o app foi desenhado para celular (tela vertical,
+     câmera etc.). Numa tela de PC, em vez de esticar tudo de forma
+     estranha, mostramos o app do tamanho de um celular, centralizado,
+     como um "cartão" flutuante — do mesmo jeito que apps como WhatsApp
+     Web mostram o celular na tela do computador.
+     Ativado por CSS puro (media query = detecta o tamanho real da tela
+     na hora, então funciona tanto num PC quanto se a janela do navegador
+     for redimensionada) e reforçado por JS (classe .is-desktop), que
+     também evita o teclado numérico/touch específico de celular quando
+     faz sentido.
+     --------------------------------------------------------------------- */
+  @media (min-width: 860px){
+    body{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      min-height:100vh;
+      padding:40px 16px;
+      background-color:var(--surface-2);
+      background-image:
+        radial-gradient(circle at 15% 10%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 55%),
+        radial-gradient(circle at 85% 90%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 55%);
+    }
+    #app{
+      width:430px;
+      max-width:430px;
+      height:min(900px, calc(100vh - 80px));
+      min-height:0;
+      border-radius:32px;
+      box-shadow:0 40px 80px -24px rgba(9,15,14,0.45), 0 0 0 1px var(--border);
+      /* faz #app virar o "container" dos elementos position:fixed (sheet,
+         toast) — assim eles ficam presos dentro do cartão do celular, em
+         vez de cobrirem a tela inteira do computador */
+      transform:translateZ(0);
+      overflow:hidden;
+    }
+  }
 </style>
 
 <div id="app">
@@ -1863,6 +1902,25 @@ function startOnlineSync(){
   window.addEventListener('online', () => { pollOnlineRecords(); flushPendingSync(); });
 }
 
+/* ---------------------------------------------------------------------
+   Detecção PC x celular — soma dois sinais (tela grande + mouse/ponteiro
+   fino, sem toque) pra não confundir um tablet ou celular grande com um
+   computador. Usada pra marcar <html> com uma classe (o CSS já se ajusta
+   sozinho pelo tamanho de tela; a classe fica disponível caso algum
+   comportamento em JS precise diferenciar no futuro).
+   --------------------------------------------------------------------- */
+function isLikelyDesktop(){
+  const telaGrande = window.innerWidth >= 860;
+  const temMouse = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+  return telaGrande && temMouse;
+}
+
+function updateDeviceModeClass(){
+  const desktop = isLikelyDesktop();
+  document.documentElement.classList.toggle('is-desktop', desktop);
+  document.documentElement.classList.toggle('is-mobile', !desktop);
+}
+
 function nowLabel(iso){
   try {
     const d = new Date(iso);
@@ -1971,6 +2029,13 @@ if ('serviceWorker' in navigator) {
 }
 
 async function init(){
+  updateDeviceModeClass();
+  let resizeTimer;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(updateDeviceModeClass, 200);
+  });
+
   bindTabBar();
   bindSheet();
   bindScannerUI();

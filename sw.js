@@ -7,7 +7,7 @@
 // no fim de CACHE_NAME (ex.: v3 -> v4). Isso força o navegador a descartar
 // o cache antigo e buscar tudo de novo — sem isso, o app pode continuar
 // mostrando uma versão desatualizada mesmo depois de reenviar os arquivos.
-const CACHE_NAME = 'escaneia-patrimonio-v4';
+const CACHE_NAME = 'escaneia-patrimonio-v5';
 const CORE_ASSETS = [
   './',
   './index.html',
