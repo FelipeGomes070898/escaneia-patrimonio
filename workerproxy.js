@@ -1,27 +1,43 @@
 /**
- * Worker do Escaneia Patrimônio — dois trabalhos em um só:
+ * Worker do Escaneia Patrimônio — quatro trabalhos em um só:
  *
  * 1) Proxy do sistema do governo: contorna o bloqueio de CORS que impede o
  *    app (hospedado no GitHub Pages) de buscar diretamente uma página de
  *    e-estado.ro.gov.br em segundo plano. Uso: GET /?url=https://e-estado.ro.gov.br/...
  *
- * 2) API dos registros online: guarda, numa KV (um "banco de dados" simples
- *    da Cloudflare), a parte de texto de cada item escaneado (tombo,
- *    descrição, local, horário — sem foto, pra ficar leve). Assim, o que é
- *    registrado em um aparelho fica visível para os outros aparelhos que
- *    também tenham o app aberto, sem precisar estar no mesmo celular.
+ * 2) API dos registros online: guarda, num banco D1 (banco de dados de
+ *    verdade da Cloudflare, tipo uma planilha com tabelas), a parte de
+ *    texto de cada item escaneado (tombo, descrição, local, horário).
  *    Endpoints:
  *      GET    /api/registros        -> lista todos os registros
  *      POST   /api/registros        -> cria ou atualiza um registro (corpo em JSON)
  *      DELETE /api/registros/{id}   -> remove um registro
  *
- * IMPORTANTE: para o item 2 funcionar, este Worker precisa de uma KV
- * Namespace vinculada com o nome exato "REGISTROS_KV" (ver instruções de
- * configuração enviadas junto com este arquivo).
+ * 3) Fotos online: guarda as fotos dos itens num bucket R2 (armazenamento
+ *    de arquivos da Cloudflare), pra qualquer aparelho conseguir ver a
+ *    foto de um item registrado em outro celular.
+ *    Endpoints:
+ *      POST /api/foto/{id}  -> envia a foto (corpo = a imagem em si)
+ *      GET  /api/foto/{id}  -> devolve a foto
+ *
+ * 4) Backup automático: todo dia, de madrugada, salva uma cópia de todos
+ *    os registros num arquivo JSON dentro do mesmo bucket R2 (pasta
+ *    "backups/"), por segurança.
+ *
+ * IMPORTANTE — este Worker precisa de 3 vinculações (bindings) configuradas
+ * no painel da Cloudflare, com esses nomes exatos:
+ *   - D1 Database  -> nome da variável: DB
+ *   - R2 Bucket    -> nome da variável: FOTOS_R2
+ *   - Cron Trigger -> ex.: todo dia às 07:00 UTC (03:00 em Rondônia)
+ * (ver instruções de configuração enviadas junto com este arquivo)
  */
 
 addEventListener('fetch', (event) => {
   event.respondWith(handleRequest(event.request));
+});
+
+addEventListener('scheduled', (event) => {
+  event.waitUntil(runBackup());
 });
 
 const ALLOWED_HOST = 'e-estado.ro.gov.br';
@@ -34,10 +50,6 @@ const CORS_HEADERS = {
 
 const JSON_HEADERS = { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' };
 
-// Chave única na KV onde a lista inteira de registros é guardada (formato
-// simples: um array de objetos, em JSON).
-const REGISTROS_KEY = 'lista_registros';
-
 async function handleRequest(request) {
   if (request.method === 'OPTIONS') {
     return new Response(null, { headers: CORS_HEADERS });
@@ -45,7 +57,7 @@ async function handleRequest(request) {
 
   const reqUrl = new URL(request.url);
 
-  // --- API de registros online ---
+  // --- API de registros (texto) ---
   if (reqUrl.pathname === '/api/registros') {
     if (request.method === 'GET') return listarRegistros();
     if (request.method === 'POST') return salvarRegistro(request);
@@ -56,26 +68,52 @@ async function handleRequest(request) {
     return excluirRegistro(id);
   }
 
+  // --- API de fotos ---
+  if (reqUrl.pathname.startsWith('/api/foto/')) {
+    const id = decodeURIComponent(reqUrl.pathname.slice('/api/foto/'.length));
+    if (request.method === 'POST') return salvarFoto(id, request);
+    if (request.method === 'GET') return buscarFoto(id);
+    return new Response('Método não suportado.', { status: 405, headers: CORS_HEADERS });
+  }
+
   // --- Proxy do site do governo (contorna CORS) ---
   return buscarSiteDoGoverno(reqUrl);
 }
 
-function getKv() {
-  if (typeof REGISTROS_KV === 'undefined') return null;
-  return REGISTROS_KV;
+function getDb() { return typeof DB === 'undefined' ? null : DB; }
+function getBucket() { return typeof FOTOS_R2 === 'undefined' ? null : FOTOS_R2; }
+
+function semDbConfigurado() {
+  return new Response('O banco de dados "DB" ainda não está vinculado a este Worker.', { status: 500, headers: CORS_HEADERS });
+}
+function semBucketConfigurado() {
+  return new Response('O armazenamento de fotos "FOTOS_R2" ainda não está vinculado a este Worker.', { status: 500, headers: CORS_HEADERS });
 }
 
+/* ------------------------------------------------------------------ *
+ * Registros (D1)
+ * ------------------------------------------------------------------ */
+
 async function listarRegistros() {
-  const kv = getKv();
-  if (!kv) return semKvConfigurada();
-  const raw = await kv.get(REGISTROS_KEY);
-  const lista = raw ? JSON.parse(raw) : [];
-  return new Response(JSON.stringify(lista), { headers: JSON_HEADERS });
+  const db = getDb();
+  if (!db) return semDbConfigurado();
+  const { results } = await db.prepare(
+    `SELECT id, tipo, patrimonio,
+            patrimonio_key AS patrimonioKey,
+            descricao, local, link,
+            criado_em AS criadoEm,
+            atualizado_em AS atualizadoEm,
+            dispositivo,
+            foto_url AS fotoUrl
+     FROM registros
+     ORDER BY atualizado_em DESC`
+  ).all();
+  return new Response(JSON.stringify(results || []), { headers: JSON_HEADERS });
 }
 
 async function salvarRegistro(request) {
-  const kv = getKv();
-  if (!kv) return semKvConfigurada();
+  const db = getDb();
+  if (!db) return semDbConfigurado();
 
   let data;
   try {
@@ -87,33 +125,106 @@ async function salvarRegistro(request) {
     return new Response('Campo "id" ausente.', { status: 400, headers: CORS_HEADERS });
   }
 
-  const raw = await kv.get(REGISTROS_KEY);
-  const lista = raw ? JSON.parse(raw) : [];
-  const idx = lista.findIndex((r) => r.id === data.id);
-  if (idx >= 0) lista[idx] = data; else lista.push(data);
-  await kv.put(REGISTROS_KEY, JSON.stringify(lista));
+  await db.prepare(
+    `INSERT INTO registros
+       (id, tipo, patrimonio, patrimonio_key, descricao, local, link, criado_em, atualizado_em, dispositivo, foto_url)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+     ON CONFLICT(id) DO UPDATE SET
+       tipo = excluded.tipo,
+       patrimonio = excluded.patrimonio,
+       patrimonio_key = excluded.patrimonio_key,
+       descricao = excluded.descricao,
+       local = excluded.local,
+       link = excluded.link,
+       criado_em = excluded.criado_em,
+       atualizado_em = excluded.atualizado_em,
+       dispositivo = excluded.dispositivo,
+       foto_url = COALESCE(excluded.foto_url, registros.foto_url)`
+  ).bind(
+    data.id,
+    data.tipo || '',
+    data.patrimonio || '',
+    data.patrimonioKey || '',
+    data.descricao || '',
+    data.local || '',
+    data.link || '',
+    data.criadoEm || '',
+    data.atualizadoEm || '',
+    data.dispositivo || '',
+    data.fotoUrl || null
+  ).run();
 
   return new Response(JSON.stringify({ ok: true }), { headers: JSON_HEADERS });
 }
 
 async function excluirRegistro(id) {
-  const kv = getKv();
-  if (!kv) return semKvConfigurada();
+  const db = getDb();
+  if (!db) return semDbConfigurado();
 
-  const raw = await kv.get(REGISTROS_KEY);
-  let lista = raw ? JSON.parse(raw) : [];
-  lista = lista.filter((r) => r.id !== id);
-  await kv.put(REGISTROS_KEY, JSON.stringify(lista));
+  await db.prepare('DELETE FROM registros WHERE id = ?1').bind(id).run();
+
+  const bucket = getBucket();
+  if (bucket) {
+    try { await bucket.delete('foto_' + id + '.jpg'); } catch (e) { /* melhor esforço */ }
+  }
 
   return new Response(JSON.stringify({ ok: true }), { headers: JSON_HEADERS });
 }
 
-function semKvConfigurada() {
-  return new Response(
-    'A KV "REGISTROS_KV" ainda não está vinculada a este Worker. Veja as instruções de configuração.',
-    { status: 500, headers: CORS_HEADERS }
-  );
+/* ------------------------------------------------------------------ *
+ * Fotos (R2)
+ * ------------------------------------------------------------------ */
+
+async function salvarFoto(id, request) {
+  const bucket = getBucket();
+  if (!bucket) return semBucketConfigurado();
+  if (!id) return new Response('id ausente.', { status: 400, headers: CORS_HEADERS });
+
+  const contentType = request.headers.get('Content-Type') || 'image/jpeg';
+  const bytes = await request.arrayBuffer();
+  if (!bytes || bytes.byteLength === 0) {
+    return new Response('Foto vazia.', { status: 400, headers: CORS_HEADERS });
+  }
+
+  await bucket.put('foto_' + id + '.jpg', bytes, { httpMetadata: { contentType } });
+  return new Response(JSON.stringify({ ok: true }), { headers: JSON_HEADERS });
 }
+
+async function buscarFoto(id) {
+  const bucket = getBucket();
+  if (!bucket) return semBucketConfigurado();
+
+  const obj = await bucket.get('foto_' + id + '.jpg');
+  if (!obj) return new Response('Não encontrada.', { status: 404, headers: CORS_HEADERS });
+
+  const headers = new Headers(CORS_HEADERS);
+  headers.set('Content-Type', (obj.httpMetadata && obj.httpMetadata.contentType) || 'image/jpeg');
+  headers.set('Cache-Control', 'public, max-age=604800');
+  return new Response(obj.body, { headers });
+}
+
+/* ------------------------------------------------------------------ *
+ * Backup automático (Cron Trigger)
+ * ------------------------------------------------------------------ */
+
+async function runBackup() {
+  const db = getDb();
+  const bucket = getBucket();
+  if (!db || !bucket) return;
+  try {
+    const { results } = await db.prepare('SELECT * FROM registros').all();
+    const dataHoje = new Date().toISOString().slice(0, 10);
+    await bucket.put('backups/registros-' + dataHoje + '.json', JSON.stringify(results || []), {
+      httpMetadata: { contentType: 'application/json; charset=utf-8' }
+    });
+  } catch (e) {
+    /* melhor esforço — se falhar, tenta de novo no próximo dia */
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Proxy do site do governo
+ * ------------------------------------------------------------------ */
 
 async function buscarSiteDoGoverno(reqUrl) {
   const target = reqUrl.searchParams.get('url');

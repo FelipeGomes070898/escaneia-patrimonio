@@ -1752,11 +1752,15 @@ async function fetchSistemaDados(url){
    os registros numa KV) — deixa os registros visíveis para outros
    aparelhos, quase em tempo real (checagem periódica, não instantânea).
    Só a parte "de texto" do registro é enviada (tombo, descrição, local,
-   horário) — a foto continua só no aparelho que tirou a foto, pra manter
-   a sincronização leve e rápida mesmo em conexão fraca de campo.
+   horário) vai logo, na hora. A foto vai por um caminho separado (upload
+   em segundo plano) e fica guardada num armazenamento de arquivos — assim
+   qualquer aparelho consegue ver a foto de um item registrado em outro
+   celular, sem deixar o salvamento local mais lento.
    --------------------------------------------------------------------- */
 const SYNC_API = SISTEMA_PROXY_BASE.replace(/\/+$/, '') + '/api/registros';
+const FOTO_API = SISTEMA_PROXY_BASE.replace(/\/+$/, '') + '/api/foto/';
 const PENDING_SYNC_KEY = 'pendingSyncIds';
+const PENDING_PHOTO_KEY = 'pendingPhotoIds';
 const DEVICE_LABEL_KEY = 'deviceLabel';
 
 function getDeviceLabel(){
@@ -1783,7 +1787,22 @@ function removePendingSyncId(id){
   if (next.length !== ids.length) setPendingSyncIds(next);
 }
 
-/** Monta o pacote leve (sem foto) que vai para o servidor. */
+function getPendingPhotoIds(){
+  try { return JSON.parse(safeLocalStorageGet(PENDING_PHOTO_KEY) || '[]'); } catch (e) { return []; }
+}
+function setPendingPhotoIds(ids){ safeLocalStorageSet(PENDING_PHOTO_KEY, JSON.stringify(ids)); }
+function addPendingPhotoId(id){
+  const ids = getPendingPhotoIds();
+  if (!ids.includes(id)) { ids.push(id); setPendingPhotoIds(ids); }
+}
+function removePendingPhotoId(id){
+  const ids = getPendingPhotoIds();
+  const next = ids.filter(x => x !== id);
+  if (next.length !== ids.length) setPendingPhotoIds(next);
+}
+
+/** Monta o pacote de texto que vai para o servidor (a foto em si vai por
+ *  um caminho separado — aqui só vai o link dela, quando já disponível). */
 function buildSyncPayload(r){
   return {
     id: r.id,
@@ -1795,8 +1814,58 @@ function buildSyncPayload(r){
     link: r.link || '',
     criadoEm: r.criadoEm,
     atualizadoEm: r.atualizadoEm,
-    dispositivo: getDeviceLabel()
+    dispositivo: getDeviceLabel(),
+    fotoUrl: r.fotoUrl || ''
   };
+}
+
+/** Converte a foto (dataURL) num arquivo binário pra enviar ao servidor. */
+async function dataUrlToBlob(dataUrl){
+  const resp = await fetch(dataUrl);
+  return await resp.blob();
+}
+
+/** Envia a foto de um registro pro armazenamento online. Roda em segundo
+ *  plano — se falhar (sem internet, por exemplo), fica marcada pra tentar
+ *  de novo mais tarde. Ao terminar, guarda o link da foto no registro e
+ *  reenvia o registro (texto) já com esse link. */
+async function uploadPhotoOnline(r){
+  if (!SISTEMA_PROXY_BASE || !r || !r.id || !r.foto) return;
+  try {
+    const blob = await dataUrlToBlob(r.foto);
+    const resp = await fetch(FOTO_API + encodeURIComponent(r.id), {
+      method: 'POST',
+      mode: 'cors',
+      credentials: 'omit',
+      headers: { 'Content-Type': blob.type || 'image/jpeg' },
+      body: blob
+    });
+    if (!resp.ok) throw new Error('http_' + resp.status);
+    r.fotoUrl = FOTO_API + encodeURIComponent(r.id);
+    try { await idbPut('registros', r); } catch (e) {}
+    removePendingPhotoId(r.id);
+    syncRecordOnline(r); // reenvia o registro já com o link da foto
+  } catch (e) {
+    addPendingPhotoId(r.id);
+  }
+}
+
+/** Reenvia fotos que não conseguiram subir antes. */
+let flushingPhotosNow = false;
+async function flushPendingPhotos(){
+  if (flushingPhotosNow) return;
+  const ids = getPendingPhotoIds();
+  if (!ids.length) return;
+  flushingPhotosNow = true;
+  try {
+    for (const id of ids) {
+      const r = state.registros.find(x => x.id === id);
+      if (!r || !r.foto) { removePendingPhotoId(id); continue; }
+      await uploadPhotoOnline(r);
+    }
+  } finally {
+    flushingPhotosNow = false;
+  }
 }
 
 /** Envia um registro para o servidor. Nunca trava a interface: se falhar
@@ -1898,8 +1967,9 @@ function startOnlineSync(){
   if (!SISTEMA_PROXY_BASE) return;
   pollOnlineRecords();
   flushPendingSync();
-  setInterval(() => { pollOnlineRecords(); flushPendingSync(); }, 25000);
-  window.addEventListener('online', () => { pollOnlineRecords(); flushPendingSync(); });
+  flushPendingPhotos();
+  setInterval(() => { pollOnlineRecords(); flushPendingSync(); flushPendingPhotos(); }, 25000);
+  window.addEventListener('online', () => { pollOnlineRecords(); flushPendingSync(); flushPendingPhotos(); });
 }
 
 /* ---------------------------------------------------------------------
@@ -2964,6 +3034,7 @@ async function saveScannedRecord(){
   if (idx >= 0) state.registros[idx] = target; else state.registros.unshift(target);
 
   syncRecordOnline(target); // em segundo plano — não trava o salvamento local
+  if (target.foto) uploadPhotoOnline(target); // idem — a foto sobe em paralelo
 
   if (local) safeLocalStorageSet('ultimoLocal', local);
 
@@ -3011,7 +3082,7 @@ function bindListUI(){
   if (btnSync) {
     btnSync.addEventListener('click', () => {
       btnSync.style.opacity = '0.5';
-      Promise.all([pollOnlineRecords(true), flushPendingSync()]).finally(() => { btnSync.style.opacity = '1'; });
+      Promise.all([pollOnlineRecords(true), flushPendingSync(), flushPendingPhotos()]).finally(() => { btnSync.style.opacity = '1'; });
     });
   }
 }
@@ -3065,8 +3136,9 @@ function renderRecCardHtml(r){
   const status = baseStatusFor(r);
   const dot = status ? `<span class="status-dot ${status}"></span>` : '';
   const isOnline = r.origem === 'online';
-  const thumb = r.foto
-    ? `<img class="th" src="${r.foto}" alt="">`
+  const imgSrc = r.foto || r.fotoUrl || '';
+  const thumb = imgSrc
+    ? `<img class="th" src="${escapeHtml(imgSrc)}" alt="" loading="lazy">`
     : `<div class="th" style="display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:18px;">
          ${isOnline
             ? '☁️'
@@ -3160,10 +3232,11 @@ function openDetailSheet(id){
       </div>
     </a>` : '';
 
-  const photo = r.foto
-    ? `<img class="photo-thumb" style="width:100%;height:220px;" src="${r.foto}" alt="Foto do item">`
+  const photoSrc = r.foto || r.fotoUrl || '';
+  const photo = photoSrc
+    ? `<img class="photo-thumb" style="width:100%;height:220px;" src="${escapeHtml(photoSrc)}" alt="Foto do item">`
     : (r.origem === 'online'
-        ? `<div class="hint" style="margin:2px 0 14px;">☁ Este item foi registrado em outro aparelho${r.dispositivo ? ' (' + escapeHtml(r.dispositivo) + ')' : ''}. A foto fica só no aparelho que fez o registro.</div>`
+        ? `<div class="hint" style="margin:2px 0 14px;">☁ Este item foi registrado em outro aparelho${r.dispositivo ? ' (' + escapeHtml(r.dispositivo) + ')' : ''}. A foto ainda está sincronizando.</div>`
         : '');
 
   const sistemaBox = r.sistemaDados ? `<div class="sistema-box">${renderSistemaDadosHtml(r.sistemaDados)}</div>` : '';
@@ -3426,12 +3499,20 @@ async function exportZip(){
     let idx = 0;
     for (const r of state.registros) {
       idx++;
-      if (!r.foto) continue;
+      const safeName = (r.patrimonio || ('item_' + idx)).replace(/[^\w.-]+/g, '_');
       try {
-        const base64 = r.foto.split(',')[1];
-        if (!base64) continue;
-        const safeName = (r.patrimonio || ('item_' + idx)).replace(/[^\w.-]+/g, '_');
-        fotos.file(safeName + '_' + r.id + '.jpg', base64, { base64: true });
+        if (r.foto) {
+          // foto já está neste aparelho
+          const base64 = r.foto.split(',')[1];
+          if (base64) fotos.file(safeName + '_' + r.id + '.jpg', base64, { base64: true });
+        } else if (r.fotoUrl) {
+          // item de outro aparelho — busca a foto online antes de exportar
+          const resp = await fetch(r.fotoUrl, { mode: 'cors', credentials: 'omit' });
+          if (resp.ok) {
+            const blob = await resp.blob();
+            fotos.file(safeName + '_' + r.id + '.jpg', blob);
+          }
+        }
       } catch (e) { /* ignora foto individual com problema */ }
     }
 
