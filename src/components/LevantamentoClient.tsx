@@ -42,6 +42,8 @@ export default function LevantamentoClient({
   const [enviandoFotos, setEnviandoFotos] = useState(false);
   const [lendoEtiqueta, setLendoEtiqueta] = useState(false);
   const [mensagemLeitura, setMensagemLeitura] = useState('');
+  const [identificandoItem, setIdentificandoItem] = useState(false);
+  const [mensagemIdentificacao, setMensagemIdentificacao] = useState('');
   const [salvando, setSalvando] = useState(false);
   const [mensagem, setMensagem] = useState<{ tipo: 'ok' | 'erro'; texto: string } | null>(null);
   const [duplicado, setDuplicado] = useState<RegistroExistente | null>(null);
@@ -235,10 +237,42 @@ export default function LevantamentoClient({
   function onFotoItemSelecionada(e: React.ChangeEvent<HTMLInputElement>) {
     const arquivo = e.target.files?.[0];
     if (!arquivo) return;
+    const eraPrimeiraFoto = fotosItem.length === 0;
     setFotosItem((prev) => [...prev, arquivo]);
     setFotosItemPreview((prev) => [...prev, URL.createObjectURL(arquivo)]);
     // limpa o input pra poder escolher/tirar outra foto em seguida
     e.target.value = '';
+    // Na primeira foto do item, tenta identificar automaticamente o que é
+    // (tipo "Mesa de escritório"), igual você faz procurando no Google —
+    // só sugere se ainda não tiver descrição digitada.
+    if (eraPrimeiraFoto && !descricao) identificarItemPelaFoto(arquivo);
+  }
+
+  /** Manda a foto do item pra uma IA de visão identificar o tipo do
+   *  objeto (mesa, cadeira, ventilador etc.) e preenche a Descrição
+   *  automaticamente. Se não conseguir (sem chave configurada, sem
+   *  internet, foto ruim etc.), simplesmente não sugere nada — nunca
+   *  trava o cadastro nem esconde o campo pra digitar manualmente. */
+  async function identificarItemPelaFoto(arquivo: File) {
+    setIdentificandoItem(true);
+    setMensagemIdentificacao('Identificando o item na foto…');
+    try {
+      const comprimida = await comprimirImagem(arquivo, 900, 0.75);
+      const form = new FormData();
+      form.append('arquivo', comprimida, 'item.jpg');
+      const resp = await fetch('/api/identificar-item', { method: 'POST', body: form });
+      const json = await resp.json();
+      if (resp.ok && json.descricaoSugerida) {
+        setDescricao((atual) => atual || json.descricaoSugerida);
+        setMensagemIdentificacao(`Sugestão automática pela foto: "${json.descricaoSugerida}". Confira e ajuste se precisar.`);
+      } else {
+        setMensagemIdentificacao('');
+      }
+    } catch {
+      setMensagemIdentificacao('');
+    } finally {
+      setIdentificandoItem(false);
+    }
   }
 
   function removerFotoItem(indice: number) {
@@ -366,6 +400,7 @@ export default function LevantamentoClient({
     setFotosItem([]);
     setFotosItemPreview([]);
     setMensagemLeitura('');
+    setMensagemIdentificacao('');
     setDuplicado(null);
     setPermitirDuplicado(false);
   }
@@ -685,6 +720,9 @@ export default function LevantamentoClient({
           </div>
           {(lendoEtiqueta || mensagemLeitura) && (
             <p className={`text-xs mt-2 ${lendoEtiqueta ? 'text-muted' : 'text-accent-strong'}`}>{mensagemLeitura}</p>
+          )}
+          {(identificandoItem || mensagemIdentificacao) && (
+            <p className={`text-xs mt-2 ${identificandoItem ? 'text-muted' : 'text-accent-strong'}`}>{mensagemIdentificacao}</p>
           )}
           {enviandoFotos && <p className="text-xs text-muted mt-2">Gerando a ficha em PDF e enviando pro Google Drive…</p>}
         </div>

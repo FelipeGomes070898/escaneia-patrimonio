@@ -53,10 +53,11 @@ Se preferir, me avise que te ajudo a fazer esse envio junto com você, passo a p
    | `GOOGLE_SERVICE_ACCOUNT_EMAIL` | veja o guia `GUIA-GOOGLE-DRIVE.md` |
    | `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY` | veja o guia `GUIA-GOOGLE-DRIVE.md` |
    | `GOOGLE_DRIVE_ROOT_FOLDER_ID` | veja o guia `GUIA-GOOGLE-DRIVE.md` |
+   | `GEMINI_API_KEY` | opcional — veja o guia `GUIA-IDENTIFICACAO-FOTO.md` |
 
    As duas primeiras (Supabase URL/anon) podem ficar como variável comum. As demais são sensíveis — na Vercel, isso já fica protegido por padrão (não aparecem pro navegador do usuário de jeito nenhum, só são lidas pelo servidor).
 
-   Se você ainda não configurou o Google Drive, pode publicar sem essas três de qualquer forma — o site funciona normalmente (cadastro sem foto funciona liso); só vai dar erro se alguém tentar anexar uma foto antes de você terminar o passo do Drive. Configure quando puder e clique em **Redeploy** depois.
+   Se você ainda não configurou o Google Drive ou a identificação por foto, pode publicar sem essas variáveis de qualquer forma — o site funciona normalmente (cadastro sem foto funciona liso, e sem sugestão automática de descrição); só vai dar erro se alguém tentar anexar uma foto antes de você terminar o passo do Drive. Configure quando puder e clique em **Redeploy** depois.
 
 4. Clique em **Deploy**. Em cerca de 1 minuto o site estará no ar, com um link tipo `https://escaneia-patrimonio-v2.vercel.app`.
 
@@ -118,6 +119,10 @@ Duas coisas pra entender:
 - **Tombamentos cadastrados mais de uma vez** aparecem com a linha inteira destacada em laranja (na planilha e também na tabela da tela de Relatórios), com um aviso já escrito na coluna OBSERVAÇÃO.
 
 O filtro de local e a busca da tela de Relatórios valem também pra planilha exportada (exporta só o que está sendo mostrado na tela).
+
+## Identificar o item automaticamente pela foto
+
+Ao tirar a primeira foto do bem (não a da etiqueta), o sistema pode sugerir sozinho a descrição — tipo "Mesa de escritório" ou "Cadeira giratória" — do mesmo jeito que dá pra fazer subindo a foto no Google/Gemini. É opcional e gratuito de configurar: o passo a passo está em `GUIA-IDENTIFICACAO-FOTO.md`. Sem configurar, o cadastro funciona normal, só sem essa sugestão automática.
 
 ## O que muda em relação ao site antigo
 
