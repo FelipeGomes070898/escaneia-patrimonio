@@ -85,6 +85,12 @@ Toda conta nova — seja criada na tela de "Criar conta" ou cadastrada por um re
 
 **Trocar senha ou nome exibido:** cada pessoa faz isso sozinha em Configurações → Minha conta, já logada.
 
+## Leitura automática de etiquetas antigas
+
+Placas antigas de patrimônio (sem QR Code, só com o número gravado/impresso) agora também funcionam: ao tirar a foto da etiqueta, o site tenta ler o número automaticamente direto da imagem e já busca os dados no sistema do governo, do mesmo jeito que faz com um QR Code. Se não conseguir ler (etiqueta apagada, foto ruim etc.), é só digitar o número manualmente — nada trava.
+
+A busca no sistema do governo aceita tanto o tombamento **atual** quanto um **antigo**. E mesmo que o número não seja encontrado lá, o item pode ser salvo normalmente no Escaneia Patrimônio com esse número.
+
 ## Duplicados e tombamentos sem registro
 
 - Ao digitar ou escanear um número de patrimônio que **já foi cadastrado antes**, o sistema avisa na hora, mostrando quem cadastrou, onde e quando — com a opção de **atualizar o registro existente** (por exemplo, se o item mudou de sala) em vez de criar um cadastro duplicado.

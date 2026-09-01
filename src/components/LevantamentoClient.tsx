@@ -39,6 +39,8 @@ export default function LevantamentoClient({
   const [fotoItem, setFotoItem] = useState<File | null>(null);
   const [fotoItemPreview, setFotoItemPreview] = useState('');
   const [enviandoFotos, setEnviandoFotos] = useState(false);
+  const [lendoEtiqueta, setLendoEtiqueta] = useState(false);
+  const [mensagemLeitura, setMensagemLeitura] = useState('');
   const [salvando, setSalvando] = useState(false);
   const [mensagem, setMensagem] = useState<{ tipo: 'ok' | 'erro'; texto: string } | null>(null);
   const [duplicado, setDuplicado] = useState<RegistroExistente | null>(null);
@@ -191,6 +193,40 @@ export default function LevantamentoClient({
     if (!arquivo) return;
     setFotoTombo(arquivo);
     setFotoTomboPreview(URL.createObjectURL(arquivo));
+    // Se a etiqueta não tem QR Code/código de barras (placas antigas, por
+    // exemplo), tenta ler o número impresso automaticamente na foto.
+    if (!patrimonio) lerNumeroDaEtiqueta(arquivo);
+  }
+
+  /** Lê o número de patrimônio direto da foto da etiqueta, usando
+   *  reconhecimento de texto (OCR) no navegador — útil pra placas antigas
+   *  sem QR Code, que só têm o número impresso/gravado. */
+  async function lerNumeroDaEtiqueta(arquivo: File) {
+    setLendoEtiqueta(true);
+    setMensagemLeitura('Lendo o número da etiqueta…');
+    try {
+      const { createWorker } = await import('tesseract.js');
+      const worker = await createWorker('eng');
+      const {
+        data: { text }
+      } = await worker.recognize(arquivo);
+      await worker.terminate();
+
+      const parsed = parseCodigo((text || '').replace(/\s+/g, ''), 'OCR');
+      if (parsed.patrimonio) {
+        setTipoCodigo('Foto (leitura automática)');
+        setPatrimonio(parsed.patrimonio);
+        setMensagemLeitura(`Número lido automaticamente: ${parsed.patrimonio}. Confira se está certo antes de salvar.`);
+        buscarNoGoverno(parsed.patrimonio);
+        checarDuplicado(parsed.patrimonio);
+      } else {
+        setMensagemLeitura('Não conseguimos ler o número automaticamente nessa foto. Digite o número manualmente abaixo.');
+      }
+    } catch {
+      setMensagemLeitura('Não foi possível ler a etiqueta automaticamente. Digite o número manualmente.');
+    } finally {
+      setLendoEtiqueta(false);
+    }
   }
 
   function onFotoItemSelecionada(e: React.ChangeEvent<HTMLInputElement>) {
@@ -236,6 +272,7 @@ export default function LevantamentoClient({
     setFotoTomboPreview('');
     setFotoItem(null);
     setFotoItemPreview('');
+    setMensagemLeitura('');
     setDuplicado(null);
     setPermitirDuplicado(false);
   }
@@ -356,7 +393,12 @@ export default function LevantamentoClient({
             </button>
           </div>
           {verificandoDuplicado && <p className="text-xs text-muted mt-1">Verificando se esse patrimônio já foi cadastrado…</p>}
-          {erroGoverno && <p className="text-xs text-danger mt-1">{erroGoverno}</p>}
+          {erroGoverno && (
+            <p className="text-xs text-danger mt-1">
+              {erroGoverno} Você pode digitar tanto o tombamento atual quanto um antigo — a busca funciona com os
+              dois. Se mesmo assim não encontrar, ainda dá pra salvar o item normalmente com esse número.
+            </p>
+          )}
         </div>
       </div>
 
@@ -513,6 +555,9 @@ export default function LevantamentoClient({
               </label>
             </div>
           </div>
+          {(lendoEtiqueta || mensagemLeitura) && (
+            <p className={`text-xs mt-2 ${lendoEtiqueta ? 'text-muted' : 'text-accent-strong'}`}>{mensagemLeitura}</p>
+          )}
           {enviandoFotos && <p className="text-xs text-muted mt-2">Enviando fotos pro Google Drive…</p>}
         </div>
       </div>
