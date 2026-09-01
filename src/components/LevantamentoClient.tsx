@@ -140,12 +140,14 @@ export default function LevantamentoClient({
         local,
         descricao: descricao || duplicado.descricao,
         criado_por_nome: nomeUsuario,
-        atualizado_em: new Date().toISOString()
+        atualizado_em: new Date().toISOString(),
+        departamento_governo: dadosGoverno?.departamento || null
       };
 
       if (fotoTombo || fotosItem.length) {
         const resultado = await gerarEEnviarFicha();
         atualizacoes.documento_pdf_url = resultado.link;
+        if (resultado.fotoItemDriveId) atualizacoes.foto_item_drive_id = resultado.fotoItemDriveId;
       }
 
       const { error } = await supabase.from('patrimonio_registros').update(atualizacoes).eq('id', duplicado.id);
@@ -244,9 +246,9 @@ export default function LevantamentoClient({
     setFotosItemPreview((prev) => prev.filter((_, i) => i !== indice));
   }
 
-  /** Envia um arquivo (a ficha em PDF) pro Google Drive, na pasta do
-   *  local informado, e devolve o link. */
-  async function enviarArquivoDrive(arquivo: Blob, nomeArquivo: string): Promise<string> {
+  /** Envia um arquivo (ficha em PDF ou uma foto solta) pro Google Drive,
+   *  na pasta do local informado, e devolve o link e o id do arquivo. */
+  async function enviarArquivoDrive(arquivo: Blob, nomeArquivo: string): Promise<{ link: string; id: string }> {
     const form = new FormData();
     form.append('arquivo', arquivo, nomeArquivo);
     form.append('local', local);
@@ -254,13 +256,15 @@ export default function LevantamentoClient({
 
     const resp = await fetch('/api/drive/upload', { method: 'POST', body: form });
     const json = await resp.json();
-    if (!resp.ok || json.error) throw new Error(json.error || 'Falha ao enviar a ficha pro Drive.');
-    return json.link as string;
+    if (!resp.ok || json.error) throw new Error(json.error || 'Falha ao enviar pro Drive.');
+    return { link: json.link as string, id: json.id as string };
   }
 
   /** Monta a ficha em PDF (fotos + dados do registro) e sobe pro Drive.
-   *  Devolve o link, o próprio PDF (pra poder compartilhar depois) e um
-   *  resumo em texto pronto pra mandar no WhatsApp. */
+   *  Também sobe a primeira foto do bem solta (além de já entrar no PDF),
+   *  pra poder aparecer dentro da planilha exportada depois. Devolve o
+   *  link da ficha, o id da foto solta, o próprio PDF (pra poder
+   *  compartilhar depois) e um resumo em texto pronto pro WhatsApp. */
   async function gerarEEnviarFicha() {
     setEnviandoFotos(true);
     try {
@@ -278,12 +282,22 @@ export default function LevantamentoClient({
       });
 
       const nomeArquivo = `${patKey(patrimonio)} - ${descricao || 'item'}.pdf`;
-      const link = await enviarArquivoDrive(pdfBlob, nomeArquivo);
+      const ficha = await enviarArquivoDrive(pdfBlob, nomeArquivo);
 
-      const resumo = `Escaneia Patrimônio\nPatrimônio: ${patrimonio}\nDescrição: ${descricao || '-'}\nLocal: ${local}\nCadastrado por: ${nomeUsuario}\nFicha (PDF): ${link}`;
-      setUltimoPdf({ blob: pdfBlob, link, resumo, nomeArquivo });
+      let fotoItemDriveId: string | null = null;
+      if (fotosComprimidas[0]) {
+        try {
+          const fotoEnviada = await enviarArquivoDrive(fotosComprimidas[0], `${patKey(patrimonio)} - foto.jpg`);
+          fotoItemDriveId = fotoEnviada.id;
+        } catch {
+          // se essa foto solta falhar, a ficha em PDF já tem a foto — não trava o cadastro
+        }
+      }
 
-      return { link, blob: pdfBlob, resumo };
+      const resumo = `Escaneia Patrimônio\nPatrimônio: ${patrimonio}\nDescrição: ${descricao || '-'}\nLocal: ${local}\nCadastrado por: ${nomeUsuario}\nFicha (PDF): ${ficha.link}`;
+      setUltimoPdf({ blob: pdfBlob, link: ficha.link, resumo, nomeArquivo });
+
+      return { link: ficha.link, fotoItemDriveId, blob: pdfBlob, resumo };
     } finally {
       setEnviandoFotos(false);
     }
@@ -313,14 +327,32 @@ export default function LevantamentoClient({
     window.open(url, '_blank');
   }
 
+  function definirLocal(nome: string) {
+    const limpo = nome.trim();
+    if (!limpo) return;
+    if (!salas.includes(limpo)) {
+      setSalas((prev) => [...prev, limpo].sort());
+      supabase.from('patrimonio_salas').insert({ nome: limpo }).then(() => {});
+    }
+    setLocal(limpo);
+  }
+
   function adicionarSala() {
-    const nome = novaSala.trim();
-    if (!nome) return;
-    if (!salas.includes(nome)) setSalas((prev) => [...prev, nome].sort());
-    setLocal(nome);
+    if (!novaSala.trim()) return;
+    definirLocal(novaSala);
     setNovaSala('');
     setMostrarNovaSala(false);
-    supabase.from('patrimonio_salas').insert({ nome }).then(() => {});
+  }
+
+  /** O campo "Departamento" que vem do sistema do governo é onde o bem
+   *  está registrado oficialmente — às vezes é exatamente onde a pessoa
+   *  encontrou o item durante o levantamento. Esse botão só preenche o
+   *  "Local" com esse valor, pra não precisar digitar de novo; a planilha
+   *  exportada guarda os dois separados (local do levantamento e local no
+   *  governo), então usar isso aqui não perde informação nenhuma. */
+  function usarDepartamentoComoLocal() {
+    if (!dadosGoverno?.departamento) return;
+    definirLocal(dadosGoverno.departamento);
   }
 
   function limparFormulario() {
@@ -360,9 +392,11 @@ export default function LevantamentoClient({
       } = await supabase.auth.getUser();
 
       let documentoPdfUrl: string | null = null;
+      let fotoItemDriveId: string | null = null;
       if (fotoTombo || fotosItem.length) {
         const resultado = await gerarEEnviarFicha();
         documentoPdfUrl = resultado.link;
+        fotoItemDriveId = resultado.fotoItemDriveId;
       }
 
       const registro = {
@@ -374,6 +408,8 @@ export default function LevantamentoClient({
         link: linkDoSistema(patrimonio),
         dispositivo: 'Site (Escaneia Patrimônio)',
         documento_pdf_url: documentoPdfUrl,
+        foto_item_drive_id: fotoItemDriveId,
+        departamento_governo: dadosGoverno?.departamento || null,
         user_id: user?.id || null,
         criado_por_nome: nomeUsuario
       };
@@ -523,9 +559,24 @@ export default function LevantamentoClient({
                 <div key={k} className="col-span-2 sm:col-span-1">
                   <dt className="text-xs text-muted uppercase tracking-wide">{rotuloCampo(k)}</dt>
                   <dd className="font-semibold break-words">{String(v)}</dd>
+                  {k === 'departamento' && String(v).trim().toLowerCase() !== local.trim().toLowerCase() && (
+                    <button
+                      onClick={usarDepartamentoComoLocal}
+                      className="mt-1 text-xs font-semibold text-accent-strong hover:underline"
+                    >
+                      Usar como local do levantamento →
+                    </button>
+                  )}
                 </div>
               ))}
           </dl>
+          {dadosGoverno.departamento && (
+            <p className="text-xs text-muted mt-3">
+              "Departamento" é onde esse bem está registrado no sistema do governo — pode ser diferente de onde você
+              encontrou o item agora. O "Local" abaixo é sempre o que vale pro levantamento; os dois ficam guardados
+              separados na planilha.
+            </p>
+          )}
         </div>
       )}
 

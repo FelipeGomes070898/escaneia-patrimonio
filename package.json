@@ -12,6 +12,7 @@
     "@supabase/ssr": "^0.4.0",
     "@supabase/supabase-js": "^2.45.0",
     "cheerio": "^1.2.0",
+    "exceljs": "^4.4.0",
     "googleapis": "^178.0.0",
     "html5-qrcode": "^2.3.8",
     "jspdf": "^4.2.1",

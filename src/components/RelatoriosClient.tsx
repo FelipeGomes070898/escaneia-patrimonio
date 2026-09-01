@@ -5,6 +5,7 @@ import { useMemo, useState } from 'react';
 interface Registro {
   id: string;
   patrimonio: string;
+  patrimonio_key?: string;
   descricao: string;
   local: string;
   criado_em: string;
@@ -16,6 +17,24 @@ interface Registro {
 export default function RelatoriosClient({ registros, locais }: { registros: Registro[]; locais: string[] }) {
   const [busca, setBusca] = useState('');
   const [filtroLocal, setFiltroLocal] = useState('');
+  const [gerandoPlanilha, setGerandoPlanilha] = useState(false);
+
+  // Marca como duplicado qualquer tombamento que aparece mais de uma vez
+  // em TODOS os registros (não só nos filtrados) — mesma regra usada na
+  // planilha exportada.
+  const duplicados = useMemo(() => {
+    const contagem = new Map<string, number>();
+    for (const r of registros) {
+      const chave = r.patrimonio_key || r.patrimonio;
+      contagem.set(chave, (contagem.get(chave) || 0) + 1);
+    }
+    return contagem;
+  }, [registros]);
+
+  function ehDuplicado(r: Registro) {
+    const chave = r.patrimonio_key || r.patrimonio;
+    return (duplicados.get(chave) || 0) > 1;
+  }
 
   const filtrados = useMemo(() => {
     const termo = busca.trim().toLowerCase();
@@ -29,6 +48,31 @@ export default function RelatoriosClient({ registros, locais }: { registros: Reg
       );
     });
   }, [registros, busca, filtroLocal]);
+
+  async function exportarPlanilha() {
+    setGerandoPlanilha(true);
+    try {
+      const params = new URLSearchParams();
+      if (filtroLocal) params.set('local', filtroLocal);
+      if (busca.trim()) params.set('busca', busca.trim());
+      const resp = await fetch(`/api/relatorios/planilha?${params.toString()}`);
+      if (!resp.ok) {
+        const json = await resp.json().catch(() => null);
+        throw new Error(json?.error || 'Não foi possível gerar a planilha.');
+      }
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `planilha-regularizacao-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      alert(e?.message || 'Não foi possível gerar a planilha.');
+    } finally {
+      setGerandoPlanilha(false);
+    }
+  }
 
   function exportarCsv() {
     const cabecalho = ['Patrimônio', 'Descrição', 'Local', 'Cadastrado por', 'Data', 'Link'];
@@ -59,13 +103,29 @@ export default function RelatoriosClient({ registros, locais }: { registros: Reg
           <h1 className="font-display font-bold text-2xl">Relatórios</h1>
           <p className="text-sm text-muted mt-1">{filtrados.length} de {registros.length} itens</p>
         </div>
-        <button
-          onClick={exportarCsv}
-          className="rounded-full bg-accent text-white font-semibold px-5 py-2.5 text-sm"
-        >
-          Exportar CSV
-        </button>
+        <div className="flex gap-2 flex-wrap">
+          <button
+            onClick={exportarPlanilha}
+            disabled={gerandoPlanilha}
+            className="rounded-full bg-accent text-white font-semibold px-5 py-2.5 text-sm disabled:opacity-50"
+          >
+            {gerandoPlanilha ? 'Gerando planilha…' : 'Exportar planilha (XLSX)'}
+          </button>
+          <button
+            onClick={exportarCsv}
+            className="rounded-full border border-border font-semibold px-5 py-2.5 text-sm hover:bg-surface-2"
+          >
+            Exportar CSV
+          </button>
+        </div>
       </div>
+
+      {Array.from(duplicados.values()).some((c) => c > 1) && (
+        <p className="text-xs bg-warn/10 text-warn rounded-md2 px-3 py-2">
+          ⚠ Existem tombamentos cadastrados mais de uma vez — as linhas em laranja abaixo (e na planilha exportada)
+          marcam esses casos.
+        </p>
+      )}
 
       <div className="flex gap-3 flex-wrap">
         <input
@@ -102,24 +162,30 @@ export default function RelatoriosClient({ registros, locais }: { registros: Reg
             </tr>
           </thead>
           <tbody>
-            {filtrados.map((r) => (
-              <tr key={r.id} className="border-b border-border last:border-0">
-                <td className="px-4 py-3 font-mono">{r.patrimonio}</td>
-                <td className="px-4 py-3">{r.descricao || '—'}</td>
-                <td className="px-4 py-3">{r.local || '—'}</td>
-                <td className="px-4 py-3">{r.criado_por_nome || '—'}</td>
-                <td className="px-4 py-3 text-muted">{formatarData(r.criado_em)}</td>
-                <td className="px-4 py-3 whitespace-nowrap">
-                  {r.documento_pdf_url ? (
-                    <a href={r.documento_pdf_url} target="_blank" rel="noreferrer" className="text-accent font-semibold text-xs hover:underline">
-                      Ver PDF
-                    </a>
-                  ) : (
-                    <span className="text-muted text-xs">—</span>
-                  )}
-                </td>
-              </tr>
-            ))}
+            {filtrados.map((r) => {
+              const duplicado = ehDuplicado(r);
+              return (
+                <tr key={r.id} className={`border-b border-border last:border-0 ${duplicado ? 'bg-warn/10' : ''}`}>
+                  <td className="px-4 py-3 font-mono">
+                    {r.patrimonio}
+                    {duplicado && <span title="Tombamento cadastrado mais de uma vez" className="ml-1.5 text-warn">⚠</span>}
+                  </td>
+                  <td className="px-4 py-3">{r.descricao || '—'}</td>
+                  <td className="px-4 py-3">{r.local || '—'}</td>
+                  <td className="px-4 py-3">{r.criado_por_nome || '—'}</td>
+                  <td className="px-4 py-3 text-muted">{formatarData(r.criado_em)}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    {r.documento_pdf_url ? (
+                      <a href={r.documento_pdf_url} target="_blank" rel="noreferrer" className="text-accent font-semibold text-xs hover:underline">
+                        Ver PDF
+                      </a>
+                    ) : (
+                      <span className="text-muted text-xs">—</span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
             {filtrados.length === 0 && (
               <tr>
                 <td colSpan={6} className="px-4 py-8 text-center text-muted">

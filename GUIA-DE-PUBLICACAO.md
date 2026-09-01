@@ -7,9 +7,9 @@ Este é o passo a passo pra colocar o site novo no ar. Ele usa o **mesmo projeto
 1. Entre no [supabase.com](https://supabase.com), abra o projeto.
 2. Vá em **SQL Editor** → **New query**.
 3. Abra o arquivo `schema-v2.sql` (nesta pasta), copie **todo** o conteúdo, cole e clique em **Run**. Deve aparecer "Success".
-4. Repita o mesmo, em ordem, com `schema-v3.sql`, `schema-v4.sql` e `schema-v5.sql` — cada um numa query nova.
+4. Repita o mesmo, em ordem, com `schema-v3.sql`, `schema-v4.sql`, `schema-v5.sql` e `schema-v6.sql` — cada um numa query nova.
 
-O `schema-v3.sql` traz o sistema de permissões (gestor / recrutador / colaborador). O `schema-v4.sql` e o `schema-v5.sql` adicionam as colunas da ficha em PDF que agora vai pro Google Drive. Nenhum desses scripts apaga nada, nem do Escaneia Patrimônio nem do Radar de Investimentos.
+O `schema-v3.sql` traz o sistema de permissões (gestor / recrutador / colaborador). O `schema-v4.sql` e o `schema-v5.sql` adicionam as colunas da ficha em PDF que vai pro Google Drive. O `schema-v6.sql` adiciona as colunas usadas na planilha de regularização (explicado mais abaixo). Nenhum desses scripts apaga nada, nem do Escaneia Patrimônio nem do Radar de Investimentos.
 
 ## 2. Ativar login por e-mail (se ainda não estiver)
 
@@ -106,6 +106,18 @@ Depois de salvar, aparece um botão **"Compartilhar ficha no WhatsApp"**: no cel
 O passo a passo pra ligar o Google Drive está no arquivo `GUIA-GOOGLE-DRIVE.md`.
 
 Nos Relatórios, cada item tem um link **"Ver PDF"** que abre a ficha completa direto no Drive.
+
+## Planilha de regularização (igual a que você já usava)
+
+Na tela **Relatórios**, o botão **"Exportar planilha (XLSX)"** gera um arquivo Excel no mesmo formato da sua planilha "Regularização e Disponibilização de bens para remanejo": DESCRIÇÃO, TOMBAMENTO, AMBIENTE, FOTO DO BEM (com a foto do item já dentro da célula, puxada do Google Drive), ONDE O TOMBAMENTO ESTÁ NO E-ESTADO, NOVO TOMBAMENTO, ESCOLA INTERESSADA, NOME DO GESTOR DA ESCOLA INTERESSADA e OBSERVAÇÃO.
+
+Duas coisas pra entender:
+
+- **"AMBIENTE" x "ONDE O TOMBAMENTO ESTÁ NO E-ESTADO"** são colunas diferentes de propósito: AMBIENTE é o local que você escolheu no levantamento (onde encontrou o bem de verdade); a outra é o campo "Departamento" que vem do sistema do governo (onde o bem está registrado oficialmente lá). Às vezes são o mesmo lugar, às vezes não — por isso na tela de Levantamento, quando os dados do governo aparecem, tem um link **"Usar como local do levantamento"** ao lado do Departamento, caso você queira que os dois batam.
+- **NOVO TOMBAMENTO, ESCOLA INTERESSADA e NOME DO GESTOR DA ESCOLA INTERESSADA** ficam em branco na planilha gerada — são informações que só surgem depois, na hora de negociar o remanejo, então continuam sendo preenchidas por você mesmo direto na planilha baixada, do jeito que já fazia.
+- **Tombamentos cadastrados mais de uma vez** aparecem com a linha inteira destacada em laranja (na planilha e também na tabela da tela de Relatórios), com um aviso já escrito na coluna OBSERVAÇÃO.
+
+O filtro de local e a busca da tela de Relatórios valem também pra planilha exportada (exporta só o que está sendo mostrado na tela).
 
 ## O que muda em relação ao site antigo
 

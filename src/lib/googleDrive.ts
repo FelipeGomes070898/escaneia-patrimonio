@@ -77,3 +77,13 @@ export async function enviarFotoParaDrive({ local, nomeArquivo, mimeType, buffer
     link: criado.data.webViewLink || `https://drive.google.com/file/d/${criado.data.id}/view`
   };
 }
+
+/** Baixa o conteúdo de um arquivo do Drive (usado pra embutir a foto do
+ *  bem dentro da planilha exportada). Só funciona pra arquivos que a
+ *  própria conta de serviço enviou/tem acesso. */
+export async function baixarArquivoDrive(fileId: string): Promise<Buffer> {
+  const auth = getAuth();
+  const drive = google.drive({ version: 'v3', auth });
+  const resposta = await drive.files.get({ fileId, alt: 'media' }, { responseType: 'arraybuffer' });
+  return Buffer.from(resposta.data as ArrayBuffer);
+}
