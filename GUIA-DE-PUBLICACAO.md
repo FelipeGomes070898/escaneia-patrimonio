@@ -7,9 +7,9 @@ Este é o passo a passo pra colocar o site novo no ar. Ele usa o **mesmo projeto
 1. Entre no [supabase.com](https://supabase.com), abra o projeto.
 2. Vá em **SQL Editor** → **New query**.
 3. Abra o arquivo `schema-v2.sql` (nesta pasta), copie **todo** o conteúdo, cole e clique em **Run**. Deve aparecer "Success".
-4. Repita o mesmo, em ordem, com `schema-v3.sql` e depois `schema-v4.sql` — cada um numa query nova.
+4. Repita o mesmo, em ordem, com `schema-v3.sql`, `schema-v4.sql` e `schema-v5.sql` — cada um numa query nova.
 
-O `schema-v3.sql` traz o sistema de permissões (gestor / recrutador / colaborador). O `schema-v4.sql` adiciona as colunas das duas fotos (tombo + item) que agora vão pro Google Drive. Nenhum desses scripts apaga nada, nem do Escaneia Patrimônio nem do Radar de Investimentos.
+O `schema-v3.sql` traz o sistema de permissões (gestor / recrutador / colaborador). O `schema-v4.sql` e o `schema-v5.sql` adicionam as colunas da ficha em PDF que agora vai pro Google Drive. Nenhum desses scripts apaga nada, nem do Escaneia Patrimônio nem do Radar de Investimentos.
 
 ## 2. Ativar login por e-mail (se ainda não estiver)
 
@@ -97,16 +97,20 @@ A busca no sistema do governo aceita tanto o tombamento **atual** quanto um **an
 - Se o tombamento **não for encontrado** no sistema do governo, o site avisa claramente ("não encontramos esse tombamento...").
 - Se o bem tiver um **tombamento antigo** registrado, ou estiver marcado como **disponível para baixa** (pode estar desativado), o site mostra esse aviso destacado junto dos dados.
 
-## Fotos no Google Drive
+## Ficha em PDF no Google Drive e compartilhamento
 
-Agora o levantamento pede **duas fotos por item**: uma da etiqueta do tombamento e outra do bem inteiro. As duas vão direto pra uma pasta no Google Drive da equipe, organizadas por local — o mesmo Drive que você já usa hoje. O passo a passo pra ligar isso está no arquivo `GUIA-GOOGLE-DRIVE.md`.
+O levantamento agora pede a foto da etiqueta do tombamento e **uma ou mais fotos do bem** (dá pra tirar quantas quiser, de ângulos diferentes, e remover alguma antes de salvar). Ao clicar em **Salvar item**, o site monta automaticamente uma ficha em PDF — uma página por foto do item, uma da etiqueta, e uma última página com todos os dados do registro (inclusive os do sistema do governo, quando encontrados) — e sobe esse PDF pra pasta do local no Google Drive da equipe. É o mesmo formato que você já vinha guardando manualmente lá.
 
-Nos Relatórios, cada item tem links "Tombo" e "Item" que abrem a foto correspondente direto no Drive.
+Depois de salvar, aparece um botão **"Compartilhar ficha no WhatsApp"**: no celular, ele abre a tela de compartilhamento normal do Android/iPhone com o PDF pronto pra enviar — o WhatsApp aparece como uma das opções, e você escolhe o grupo ou pessoa na hora. Não existe um jeito de mandar automaticamente pra um grupo específico sem essa escolha manual (o WhatsApp não permite isso de fora do próprio app), mas o compartilhamento fica a um toque de distância. No computador, o botão abre o WhatsApp Web com uma mensagem pronta e o link do PDF.
+
+O passo a passo pra ligar o Google Drive está no arquivo `GUIA-GOOGLE-DRIVE.md`.
+
+Nos Relatórios, cada item tem um link **"Ver PDF"** que abre a ficha completa direto no Drive.
 
 ## O que muda em relação ao site antigo
 
 - Agora **precisa de internet** pra usar (antes funcionava offline e sincronizava depois).
 - Tem **login com permissões** — cada pessoa entra com seu e-mail, com um papel definido, e o sistema mostra quem cadastrou cada item.
 - Ganhou as telas de **Painel geral**, **Relatórios** (com exportar em CSV), **Usuários** (com gestão de acesso) e **Configurações** (locais + conta).
-- As fotos agora vão duas por item (tombo + item) direto pro Google Drive da equipe, em vez de ficarem só dentro do banco de dados.
+- As fotos agora viram uma ficha em PDF por item, salva direto no Google Drive da equipe, com opção de compartilhar no WhatsApp — em vez de ficarem só dentro do banco de dados.
 - O site antigo (GitHub Pages) continua no ar do jeito que estava, caso você queira manter os dois por enquanto.

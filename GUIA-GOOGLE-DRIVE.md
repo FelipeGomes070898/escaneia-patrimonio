@@ -64,10 +64,10 @@ Depois de adicionar (ou se já publicou antes), vá em **Deployments** → nos t
 
 ## Como fica organizado
 
-Dentro da sua pasta raiz, o sistema cria automaticamente uma subpasta pra cada **local** cadastrado em Configurações (ex: "Sala 1", "Recepção") e salva as duas fotos de cada item ali dentro, nomeadas com o número do patrimônio e a descrição — por exemplo `001.234.567 - Cadeira giratória - tombo.jpg` e `... - item.jpg`.
+Dentro da sua pasta raiz, o sistema cria automaticamente uma subpasta pra cada **local** cadastrado em Configurações (ex: "Sala 1", "Recepção") e salva ali dentro uma ficha em PDF por item (fotos + dados do registro), nomeada com o número do patrimônio e a descrição — por exemplo `001.234.567 - Cadeira giratória.pdf`.
 
 Isso é uma organização mais simples do que os "Compartimento 1/2/3" que você vinha fazendo à mão — dá pra evoluir depois se você quiser esse nível de detalhe (por exemplo, deixando escolher um "compartimento" dentro do local na hora do cadastro). Por enquanto, cada local vira uma pasta.
 
 ## Rodar o script SQL
 
-Não esqueça de rodar o `schema-v4.sql` no Supabase (SQL Editor → colar → Run) — ele adiciona as colunas que guardam os links das duas fotos.
+Não esqueça de rodar o `schema-v4.sql` e o `schema-v5.sql` no Supabase (SQL Editor → colar → Run, um de cada vez) — eles adicionam as colunas que guardam o link da ficha em PDF.

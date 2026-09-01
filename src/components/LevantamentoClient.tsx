@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client';
 import { parseCodigo, formatPatrimonio, onlyDigits, patKey, linkDoSistema } from '@/lib/patrimonio';
 import type { SistemaDados } from '@/lib/govLookup';
 import { comprimirImagem } from '@/lib/imagem';
+import { gerarFichaPdf } from '@/lib/gerarFichaPdf';
 
 interface RegistroExistente {
   id: string;
@@ -36,8 +37,8 @@ export default function LevantamentoClient({
   const [erroGoverno, setErroGoverno] = useState('');
   const [fotoTombo, setFotoTombo] = useState<File | null>(null);
   const [fotoTomboPreview, setFotoTomboPreview] = useState('');
-  const [fotoItem, setFotoItem] = useState<File | null>(null);
-  const [fotoItemPreview, setFotoItemPreview] = useState('');
+  const [fotosItem, setFotosItem] = useState<File[]>([]);
+  const [fotosItemPreview, setFotosItemPreview] = useState<string[]>([]);
   const [enviandoFotos, setEnviandoFotos] = useState(false);
   const [lendoEtiqueta, setLendoEtiqueta] = useState(false);
   const [mensagemLeitura, setMensagemLeitura] = useState('');
@@ -46,6 +47,7 @@ export default function LevantamentoClient({
   const [duplicado, setDuplicado] = useState<RegistroExistente | null>(null);
   const [verificandoDuplicado, setVerificandoDuplicado] = useState(false);
   const [permitirDuplicado, setPermitirDuplicado] = useState(false);
+  const [ultimoPdf, setUltimoPdf] = useState<{ blob: Blob; link: string; resumo: string; nomeArquivo: string } | null>(null);
 
   const scannerRef = useRef<any>(null);
   const readerId = 'reader';
@@ -132,6 +134,7 @@ export default function LevantamentoClient({
     if (!duplicado) return;
     setSalvando(true);
     setMensagem(null);
+    setUltimoPdf(null);
     try {
       const atualizacoes: Record<string, any> = {
         local,
@@ -140,11 +143,9 @@ export default function LevantamentoClient({
         atualizado_em: new Date().toISOString()
       };
 
-      if (fotoTombo || fotoItem) {
-        setEnviandoFotos(true);
-        if (fotoTombo) atualizacoes.foto_tombo_url = await enviarFotoDrive(fotoTombo, 'tombo');
-        if (fotoItem) atualizacoes.foto_item_url = await enviarFotoDrive(fotoItem, 'item');
-        setEnviandoFotos(false);
+      if (fotoTombo || fotosItem.length) {
+        const resultado = await gerarEEnviarFicha();
+        atualizacoes.documento_pdf_url = resultado.link;
       }
 
       const { error } = await supabase.from('patrimonio_registros').update(atualizacoes).eq('id', duplicado.id);
@@ -232,24 +233,84 @@ export default function LevantamentoClient({
   function onFotoItemSelecionada(e: React.ChangeEvent<HTMLInputElement>) {
     const arquivo = e.target.files?.[0];
     if (!arquivo) return;
-    setFotoItem(arquivo);
-    setFotoItemPreview(URL.createObjectURL(arquivo));
+    setFotosItem((prev) => [...prev, arquivo]);
+    setFotosItemPreview((prev) => [...prev, URL.createObjectURL(arquivo)]);
+    // limpa o input pra poder escolher/tirar outra foto em seguida
+    e.target.value = '';
   }
 
-  /** Comprime e envia uma foto pro Google Drive, na pasta do local
-   *  informado, e devolve o link pra guardar no cadastro. */
-  async function enviarFotoDrive(arquivo: File, sufixo: 'tombo' | 'item'): Promise<string | null> {
-    const comprimida = await comprimirImagem(arquivo);
-    const nomeArquivo = `${patKey(patrimonio)} - ${descricao || 'item'} - ${sufixo}.jpg`;
+  function removerFotoItem(indice: number) {
+    setFotosItem((prev) => prev.filter((_, i) => i !== indice));
+    setFotosItemPreview((prev) => prev.filter((_, i) => i !== indice));
+  }
+
+  /** Envia um arquivo (a ficha em PDF) pro Google Drive, na pasta do
+   *  local informado, e devolve o link. */
+  async function enviarArquivoDrive(arquivo: Blob, nomeArquivo: string): Promise<string> {
     const form = new FormData();
-    form.append('arquivo', comprimida, nomeArquivo);
+    form.append('arquivo', arquivo, nomeArquivo);
     form.append('local', local);
     form.append('nomeArquivo', nomeArquivo);
 
     const resp = await fetch('/api/drive/upload', { method: 'POST', body: form });
     const json = await resp.json();
-    if (!resp.ok || json.error) throw new Error(json.error || 'Falha ao enviar foto pro Drive.');
+    if (!resp.ok || json.error) throw new Error(json.error || 'Falha ao enviar a ficha pro Drive.');
     return json.link as string;
+  }
+
+  /** Monta a ficha em PDF (fotos + dados do registro) e sobe pro Drive.
+   *  Devolve o link, o próprio PDF (pra poder compartilhar depois) e um
+   *  resumo em texto pronto pra mandar no WhatsApp. */
+  async function gerarEEnviarFicha() {
+    setEnviandoFotos(true);
+    try {
+      const fotosComprimidas = await Promise.all(fotosItem.map((f) => comprimirImagem(f)));
+      const fotoTomboComprimida = fotoTombo ? await comprimirImagem(fotoTombo) : null;
+
+      const pdfBlob = await gerarFichaPdf(fotosComprimidas, fotoTomboComprimida, {
+        patrimonio,
+        descricao,
+        local,
+        tipoCodigo,
+        criadoPor: nomeUsuario,
+        linkSistema: linkDoSistema(patrimonio),
+        dadosGoverno
+      });
+
+      const nomeArquivo = `${patKey(patrimonio)} - ${descricao || 'item'}.pdf`;
+      const link = await enviarArquivoDrive(pdfBlob, nomeArquivo);
+
+      const resumo = `Escaneia Patrimônio\nPatrimônio: ${patrimonio}\nDescrição: ${descricao || '-'}\nLocal: ${local}\nCadastrado por: ${nomeUsuario}\nFicha (PDF): ${link}`;
+      setUltimoPdf({ blob: pdfBlob, link, resumo, nomeArquivo });
+
+      return { link, blob: pdfBlob, resumo };
+    } finally {
+      setEnviandoFotos(false);
+    }
+  }
+
+  /** Abre o compartilhamento do celular (WhatsApp aparece como opção,
+   *  inclusive pra grupos) com a ficha em PDF anexada. Não existe um
+   *  jeito de mandar direto pra um grupo específico sem interação —
+   *  isso a pessoa escolhe na hora. */
+  async function compartilharNoWhatsapp() {
+    if (!ultimoPdf) return;
+    const arquivo = new File([ultimoPdf.blob], ultimoPdf.nomeArquivo, { type: 'application/pdf' });
+
+    if (typeof navigator !== 'undefined' && (navigator as any).canShare?.({ files: [arquivo] })) {
+      try {
+        await (navigator as any).share({ files: [arquivo], title: 'Escaneia Patrimônio', text: ultimoPdf.resumo });
+        return;
+      } catch {
+        /* usuário cancelou o compartilhamento — sem problema */
+        return;
+      }
+    }
+
+    // Sem suporte a compartilhar arquivo (ex: computador): abre o
+    // WhatsApp Web/app com o texto e o link do PDF prontos.
+    const url = `https://wa.me/?text=${encodeURIComponent(ultimoPdf.resumo)}`;
+    window.open(url, '_blank');
   }
 
   function adicionarSala() {
@@ -270,8 +331,8 @@ export default function LevantamentoClient({
     setErroGoverno('');
     setFotoTombo(null);
     setFotoTomboPreview('');
-    setFotoItem(null);
-    setFotoItemPreview('');
+    setFotosItem([]);
+    setFotosItemPreview([]);
     setMensagemLeitura('');
     setDuplicado(null);
     setPermitirDuplicado(false);
@@ -292,18 +353,16 @@ export default function LevantamentoClient({
     }
     setSalvando(true);
     setMensagem(null);
+    setUltimoPdf(null);
     try {
       const {
         data: { user }
       } = await supabase.auth.getUser();
 
-      let fotoTomboUrl: string | null = null;
-      let fotoItemUrl: string | null = null;
-      if (fotoTombo || fotoItem) {
-        setEnviandoFotos(true);
-        if (fotoTombo) fotoTomboUrl = await enviarFotoDrive(fotoTombo, 'tombo');
-        if (fotoItem) fotoItemUrl = await enviarFotoDrive(fotoItem, 'item');
-        setEnviandoFotos(false);
+      let documentoPdfUrl: string | null = null;
+      if (fotoTombo || fotosItem.length) {
+        const resultado = await gerarEEnviarFicha();
+        documentoPdfUrl = resultado.link;
       }
 
       const registro = {
@@ -314,8 +373,7 @@ export default function LevantamentoClient({
         local,
         link: linkDoSistema(patrimonio),
         dispositivo: 'Site (Escaneia Patrimônio)',
-        foto_tombo_url: fotoTomboUrl,
-        foto_item_url: fotoItemUrl,
+        documento_pdf_url: documentoPdfUrl,
         user_id: user?.id || null,
         criado_por_nome: nomeUsuario
       };
@@ -342,11 +400,19 @@ export default function LevantamentoClient({
 
       {mensagem && (
         <div
-          className={`rounded-md2 px-4 py-3 text-sm font-semibold ${
+          className={`rounded-md2 px-4 py-3 text-sm font-semibold flex items-center justify-between gap-3 flex-wrap ${
             mensagem.tipo === 'ok' ? 'bg-ok/10 text-ok' : 'bg-danger/10 text-danger'
           }`}
         >
-          {mensagem.texto}
+          <span>{mensagem.texto}</span>
+          {mensagem.tipo === 'ok' && ultimoPdf && (
+            <button
+              onClick={compartilharNoWhatsapp}
+              className="rounded-full bg-ok text-white font-semibold px-4 py-1.5 text-xs whitespace-nowrap"
+            >
+              Compartilhar ficha no WhatsApp
+            </button>
+          )}
         </div>
       )}
 
@@ -528,11 +594,11 @@ export default function LevantamentoClient({
         <div>
           <label className="text-xs font-semibold text-muted">Fotos (opcional, mas recomendado)</label>
           <p className="text-xs text-muted mt-0.5 mb-2">
-            Tire uma foto da etiqueta do tombamento e outra do bem inteiro. As fotos vão pra pasta do local no Google
-            Drive da equipe.
+            Tire uma foto da etiqueta do tombamento e uma ou mais fotos do bem inteiro. Ao salvar, todas viram uma
+            única ficha em PDF (fotos + dados do registro), que vai pra pasta do local no Google Drive da equipe.
           </p>
 
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-4">
             <div className="flex items-center gap-3">
               {fotoTomboPreview && (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -544,21 +610,32 @@ export default function LevantamentoClient({
               </label>
             </div>
 
-            <div className="flex items-center gap-3">
-              {fotoItemPreview && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={fotoItemPreview} alt="Prévia do item" className="w-16 h-16 rounded-md2 object-cover border border-border" />
-              )}
-              <label className="rounded-md2 border border-border px-4 py-2 text-sm font-semibold hover:bg-surface-2 cursor-pointer">
-                {fotoItemPreview ? 'Trocar foto do item' : 'Foto do item (o bem inteiro)'}
-                <input type="file" accept="image/*" capture="environment" onChange={onFotoItemSelecionada} className="hidden" />
-              </label>
+            <div>
+              <div className="flex flex-wrap items-center gap-3">
+                {fotosItemPreview.map((src, i) => (
+                  <div key={i} className="relative">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={src} alt={`Foto do item ${i + 1}`} className="w-16 h-16 rounded-md2 object-cover border border-border" />
+                    <button
+                      onClick={() => removerFotoItem(i)}
+                      className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-danger text-white text-xs font-bold flex items-center justify-center"
+                      aria-label="Remover foto"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+                <label className="rounded-md2 border border-border px-4 py-2 text-sm font-semibold hover:bg-surface-2 cursor-pointer">
+                  {fotosItemPreview.length ? '+ Outra foto do item' : 'Foto do item (o bem inteiro)'}
+                  <input type="file" accept="image/*" capture="environment" onChange={onFotoItemSelecionada} className="hidden" />
+                </label>
+              </div>
             </div>
           </div>
           {(lendoEtiqueta || mensagemLeitura) && (
             <p className={`text-xs mt-2 ${lendoEtiqueta ? 'text-muted' : 'text-accent-strong'}`}>{mensagemLeitura}</p>
           )}
-          {enviandoFotos && <p className="text-xs text-muted mt-2">Enviando fotos pro Google Drive…</p>}
+          {enviandoFotos && <p className="text-xs text-muted mt-2">Gerando a ficha em PDF e enviando pro Google Drive…</p>}
         </div>
       </div>
 
@@ -568,7 +645,7 @@ export default function LevantamentoClient({
           disabled={salvando}
           className="w-full rounded-full bg-accent text-white font-semibold py-3 text-sm disabled:opacity-50"
         >
-          {enviandoFotos ? 'Enviando fotos…' : salvando ? 'Salvando…' : 'Salvar item'}
+          {enviandoFotos ? 'Gerando ficha em PDF…' : salvando ? 'Salvando…' : 'Salvar item'}
         </button>
       )}
     </div>
