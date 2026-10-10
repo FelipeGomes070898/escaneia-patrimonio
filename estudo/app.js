@@ -6,7 +6,7 @@
   var $app = document.getElementById('app');
 
   /* ---------- Estado ---------- */
-  function defaults() { return { done: {}, answers: {}, erros: {}, rev: {}, notas: {}, links: {}, sims: [], cron: {}, meta: 5, tema: '', nivel: '', perfil: null, dia: {}, metaq: 30, metaNota: 70 }; }
+  function defaults() { return { done: {}, answers: {}, erros: {}, rev: {}, notas: {}, links: {}, sims: [], cron: {}, meta: 5, tema: '', nivel: '', concurso: '', perfil: null, dia: {}, metaq: 30, metaNota: 70 }; }
   var S = (function () { try { return Object.assign(defaults(), JSON.parse(localStorage.getItem(LS) || '{}')); } catch (e) { return defaults(); } })();
   function save() { try { localStorage.setItem(LS, JSON.stringify(S)); } catch (e) { /* sem armazenamento: segue em memória */ } }
   function loadSim() { try { return JSON.parse(localStorage.getItem(LSSIM) || 'null'); } catch (e) { return null; } }
@@ -99,7 +99,7 @@
   var SIDE = NAV.slice(0, 4).concat([['#/erros', 'Erros', '📓'], ['#/revisao', 'Revisão', '🔁'], ['#/cronograma', 'Cronograma', '📅'], ['#/edital', 'Edital', '📄'], ['#/config', 'Ajustes', '⚙️']]);
   function drawNav(h) {
     var cur = h.split('?')[0], chip = document.getElementById('nvchip'), ni = nvInfo();
-    if (chip) { chip.hidden = !ni; chip.textContent = ni ? '🎓 ' + ni.nome : ''; chip.title = 'Seu nível cadastrado. Toque para trocar.'; }
+    if (chip) { chip.hidden = !ni; chip.textContent = ni && S.concurso ? '🎓 ' + concInfo(S.concurso).nome + ' · ' + NV_CURTO[S.nivel] : ''; chip.title = 'Seu nível cadastrado. Toque para trocar.'; }
     function on(href) { if (href === '#/') return cur === '#/' || cur === ''; if (href === '#/mais') return ['#/mais', '#/erros', '#/revisao', '#/cronograma', '#/edital', '#/config'].indexOf(cur) >= 0; return cur.indexOf(href) === 0 || (href === '#/trilha' && /^#\/(materia|aula)/.test(cur)) || (href === '#/praticar' && cur.indexOf('#/quiz') === 0); }
     document.getElementById('sidenav').innerHTML = SIDE.map(function (n) { return '<a href="' + n[0] + '" class="' + (on(n[0]) ? 'on' : '') + '">' + n[1] + '</a>'; }).join('');
     document.getElementById('bottomnav').innerHTML = NAV.map(function (n) { return '<a href="' + n[0] + '" class="' + (on(n[0]) ? 'on' : '') + '"><span class="ic">' + n[2] + '</span>' + n[1] + '</a>'; }).join('');
@@ -112,7 +112,8 @@
     var p = h.split('?')[0].split('/'); // ['#','x',...]
     var q = {}; (h.split('?')[1] || '').split('&').forEach(function (kv) { if (kv) { var a = kv.split('='); q[a[0]] = decodeURIComponent(a[1] || ''); } });
     if (!S.perfil) { drawNav(h); return vCadastro(); }
-    if (niveisReg().indexOf(S.nivel) < 0) { S.nivel = niveisReg()[0]; save(); }
+    migraPerfil();
+    if (!inscs().some(function (i) { return i.c === S.concurso && i.n === S.nivel; })) { setAlvo(inscs()[0].c, inscs()[0].n); save(); }
     drawNav(h);
     var v = p[1] || '';
     var fn = {
@@ -126,80 +127,103 @@
   window.addEventListener('hashchange', route);
   function go(h) { if (location.hash === h) route(); else location.hash = h; }
 
-  /* ---------- Cadastro e níveis ---------- */
-  function niveisReg() { return (S.perfil && S.perfil.niveis) || []; }
+  /* ---------- Cadastro: concurso(s) + nível pago em cada um ---------- */
+  var NV_CURTO = { fundamental: 'Fundamental', medio: 'Médio', superior: 'Superior' };
+  function concInfo(id) { return C.concursos.filter(function (x) { return x.id === id; })[0] || C.concursos[0]; }
+  function inscs() { return (S.perfil && S.perfil.insc) || []; }
+  function niveisReg() { var o = []; inscs().forEach(function (i) { if (o.indexOf(i.n) < 0) o.push(i.n); }); return o; }
   function nomeNivel(id) { var n = C.niveis.filter(function (x) { return x.id === id; })[0]; return n ? n.nome : id; }
+  function rotulo(i) { return concInfo(i.c).nome + ' · ' + nomeNivel(i.n); }
+  function setAlvo(c, n) { S.concurso = c; S.nivel = n; }
+  function estrConf() { return S.concurso === 'semed' && S.nivel === 'medio'; } /* só esta combinação tem edital lido */
   function primeiroNome() { return S.perfil ? String(S.perfil.nome).split(' ')[0] : ''; }
   function marcaSessao() { nivelConfirmado = true; try { sessionStorage.setItem('estudo.nvok', '1'); } catch (e) { } }
+  function migraPerfil() {
+    if (S.perfil && !S.perfil.insc) {
+      S.perfil.insc = (S.perfil.niveis || []).map(function (n) { return { c: (C.concursos.filter(function (x) { return x.niveis.indexOf(n) >= 0; })[0] || C.concursos[0]).id, n: n }; });
+      save();
+    }
+  }
+  function provaTxt(cc) { return cc.prova ? brDate(cc.prova.slice(0, 10)) + ' às ' + cc.prova.slice(11, 16).replace(':', 'h') : 'sem data oficial'; }
 
   var nivelConfirmado = false;
   try { nivelConfirmado = sessionStorage.getItem('estudo.nvok') === '1'; } catch (e) { }
   function confirmarNivel() {
-    var n = nvInfo(), reg = niveisReg(), hh = (location.hash || '');
+    var n = nvInfo(), reg = inscs(), hh = (location.hash || '');
     if (!S.perfil || !n || nivelConfirmado || hh.indexOf('#/nivel') === 0 || hh.indexOf('#/cadastro') === 0) return;
     var o = document.createElement('div'); o.className = 'modal';
-    var ntop = C.materias.reduce(function (a, m) { return a + topsOf(m).length; }, 0);
-    var corpo;
+    var cc = concInfo(S.concurso), corpo;
     if (reg.length > 1) {
-      corpo = '<div class="small mut">Olá, ' + esc(primeiroNome()) + '! Você se cadastrou em ' + reg.length + ' níveis. <b>Qual vai estudar agora?</b></div>' +
-        '<div style="display:grid;gap:.5rem;margin:.7rem 0">' + reg.map(function (id) { return '<button class="btn ' + (id === S.nivel ? 'pri' : '') + '" data-pick="' + id + '">🎓 ' + esc(nomeNivel(id)) + '</button>'; }).join('') + '</div>' +
-        '<p class="small mut">Você pode alternar entre eles a qualquer momento, tocando no nível no topo da tela.</p><div class="row"><button class="btn sm" id="nv-troca">Editar cadastro</button></div>';
+      corpo = '<div class="small mut">Olá, ' + esc(primeiroNome()) + '! Você tem ' + reg.length + ' inscrições. <b>Qual vai estudar agora?</b></div>' +
+        '<div style="display:grid;gap:.5rem;margin:.7rem 0">' + reg.map(function (i, k) { return '<button class="btn ' + (i.c === S.concurso && i.n === S.nivel ? 'pri' : '') + '" data-pick="' + k + '">🎓 ' + esc(rotulo(i)) + '</button>'; }).join('') + '</div>' +
+        '<p class="small mut">Você pode alternar a qualquer momento, tocando no concurso no topo da tela.</p><div class="row"><button class="btn sm" id="nv-troca">Editar cadastro</button></div>';
     } else {
-      corpo = '<div class="small mut">Olá, ' + esc(primeiroNome()) + '! Você está cadastrado(a) no nível:</div><h2 id="nvt" style="margin:.2rem 0">🎓 ' + esc(n.nome) + '</h2><p class="small">' + esc(n.desc) + '</p><p class="small mut">' + ntop + ' tópicos · ' + (C.dist[n.id].confirmada ? 'estrutura da prova confirmada no edital' : 'estrutura da prova estimada (confira no edital do seu cargo)') + '</p><p><b>É esse o nível da prova que você pagou?</b></p><div class="row"><button class="btn pri" id="nv-ok">Sim, é esse</button><button class="btn" id="nv-troca">Editar cadastro</button></div>';
+      corpo = '<div class="small mut">Olá, ' + esc(primeiroNome()) + '! Você está inscrito(a) em:</div><h2 style="margin:.2rem 0">🎓 ' + esc(cc.nome) + ' · ' + esc(n.nome) + '</h2><p class="small">' + esc(cc.completo) + ' · banca ' + esc(cc.banca) + '<br>Prova: ' + esc(provaTxt(cc)) + '</p><p class="small mut">' + (estrConf() ? 'Estrutura da prova confirmada no edital.' : 'Estrutura da prova estimada (confira no edital do seu cargo).') + '</p><p><b>É esse o concurso e o nível que você pagou?</b></p><div class="row"><button class="btn pri" id="nv-ok">Sim, é esse</button><button class="btn" id="nv-troca">Editar cadastro</button></div>';
     }
     o.innerHTML = '<div class="box" role="dialog" aria-modal="true">' + corpo + '</div>';
     document.body.appendChild(o);
     function fecha() { marcaSessao(); o.remove(); }
     var ok = o.querySelector('#nv-ok'); if (ok) { ok.onclick = fecha; ok.focus(); }
     o.querySelector('#nv-troca').onclick = function () { fecha(); go('#/cadastro'); };
-    Array.prototype.forEach.call(o.querySelectorAll('[data-pick]'), function (b) { b.onclick = function () { S.nivel = b.getAttribute('data-pick'); save(); fecha(); route(); }; });
+    Array.prototype.forEach.call(o.querySelectorAll('[data-pick]'), function (b) { b.onclick = function () { var i = reg[+b.getAttribute('data-pick')]; setAlvo(i.c, i.n); save(); fecha(); route(); }; });
   }
 
-  /* Cadastro: nome + níveis para os quais a pessoa pagou a inscrição (1 a 3) */
   function vCadastro() {
     var edit = !!S.perfil;
     if (!edit) { document.getElementById('sidenav').innerHTML = ''; document.getElementById('bottomnav').innerHTML = ''; }
-    var marcados = edit ? niveisReg() : (S.nivel ? [S.nivel] : []);
+    var marc = edit ? inscs() : (S.nivel ? [{ c: S.concurso || (C.concursos.filter(function (x) { return x.niveis.indexOf(S.nivel) >= 0; })[0] || C.concursos[0]).id, n: S.nivel }] : []);
+    function tem(c, n) { return marc.some(function (i) { return i.c === c && i.n === n; }); }
+    function temC(c) { return marc.some(function (i) { return i.c === c; }); }
     var nome = edit ? S.perfil.nome : '';
-    var h = (edit ? '' : '<div class="card" style="border-left:6px solid var(--pri)"><b>Bem-vindo(a) à Rota do Concurso</b><p class="small" style="margin:.3rem 0">Concursos de Porto Velho/RO 2026. Primeiro o cadastro; depois o sistema monta o seu estudo para passar:</p><ul class="small" style="margin:.2rem 0;padding-left:1.1rem"><li>meta de nota e nota projetada</li><li>missão diária e foco nos seus pontos fracos</li><li>simulados, caderno de erros e revisão espaçada</li></ul></div>') + '<h1>' + (edit ? 'Meu cadastro' : 'Cadastre-se para entrar') + '</h1>' +
-      '<p class="mut">' + (edit ? 'Atualize seu nome ou os níveis da sua inscrição.' : 'Informe seu nome e o(s) nível(is) da prova para o(s) qual(is) você pagou a inscrição. Tudo no site é montado para você passar no nível escolhido: meta de nota, missão diária e foco nos seus pontos fracos.') + '</p>' +
+    var h = (edit ? '' : '<div class="card" style="border-left:6px solid var(--pri)"><b>Bem-vindo(a) à Rota do Concurso</b><p class="small" style="margin:.3rem 0">Concursos de Porto Velho/RO 2026. Primeiro o cadastro; depois o sistema monta o seu estudo para passar:</p><ul class="small" style="margin:.2rem 0;padding-left:1.1rem"><li>meta de nota e nota projetada</li><li>missão diária e foco nos seus pontos fracos</li><li>simulados, caderno de erros e revisão espaçada</li></ul></div>') +
+      '<h1>' + (edit ? 'Meu cadastro' : 'Cadastre-se para entrar') + '</h1>' +
+      '<p class="mut">' + (edit ? 'Atualize seu nome ou suas inscrições.' : 'Informe seu nome, o(s) concurso(s) em que você se inscreveu e o nível que pagou em cada um. Tudo no site é montado para você passar nessa prova: meta de nota, missão diária e foco nos seus pontos fracos.') + '</p>' +
       '<form id="cad" class="card" novalidate><label for="cd-nome">Seu nome</label><input type="text" id="cd-nome" maxlength="60" autocomplete="name" placeholder="Ex.: Maria Silva" value="' + esc(nome) + '">' +
-      '<fieldset style="border:0;padding:0;margin:.8rem 0 0"><legend style="font-weight:600;margin-bottom:.3rem">Para qual(is) nível(is) você pagou a inscrição?</legend><p class="small mut" style="margin:0 0 .4rem">Marque 1, 2 ou 3 opções. Se pagou mais de um nível, você poderá alternar entre eles.</p>' +
-      C.niveis.map(function (n) {
-        return '<label class="chk" style="font-weight:400;border:1px solid var(--line);border-radius:12px;padding:.6rem .7rem;margin:.4rem 0"><input type="checkbox" name="nv" value="' + n.id + '"' + (marcados.indexOf(n.id) >= 0 ? ' checked' : '') + '><span><b>' + esc(n.nome) + '</b><br><span class="small mut">' + esc(n.desc) + '</span><br><span class="small ' + (C.dist[n.id].confirmada ? '' : 'mut') + '">' + (C.dist[n.id].confirmada ? '✔ estrutura da prova confirmada no edital' : 'estrutura da prova estimada') + '</span></span></label>';
+      '<fieldset style="border:0;padding:0;margin:.8rem 0 0"><legend style="font-weight:600;margin-bottom:.3rem">Em qual concurso você se inscreveu?</legend><p class="small mut" style="margin:0 0 .4rem">Marque o concurso e, dentro dele, o nível da prova que você pagou (pode marcar mais de um nível e mais de um concurso).</p>' +
+      C.concursos.map(function (cc) {
+        return '<div class="conc" data-cc="' + cc.id + '" style="border:1px solid var(--line);border-radius:12px;padding:.6rem .7rem;margin:.5rem 0"><label class="chk" style="font-weight:400;margin:0"><input type="checkbox" name="cc" value="' + cc.id + '"' + (temC(cc.id) ? ' checked' : '') + '><span><b>' + esc(cc.nome) + '</b> · banca ' + esc(cc.banca) + '<br><span class="small mut">' + esc(cc.completo) + '</span><br><span class="small mut">Prova: ' + esc(provaTxt(cc)) + '. ' + esc(cc.status) + '</span></span></label>' +
+          '<div class="nvs" style="margin:.4rem 0 0 2rem"' + (temC(cc.id) ? '' : ' hidden') + '><div class="small" style="font-weight:600">Nível que você pagou:</div>' +
+          cc.niveis.map(function (n) { return '<label class="chk" style="font-weight:400;margin:0;padding:.25rem 0"><input type="checkbox" name="n-' + cc.id + '" value="' + n + '"' + (tem(cc.id, n) ? ' checked' : '') + '><span>' + esc(nomeNivel(n)) + '</span></label>'; }).join('') + '</div></div>';
       }).join('') + '</fieldset><div id="cd-err" class="small" role="alert" style="color:var(--bad);min-height:1.2em;margin:.4rem 0"></div>' +
       '<div class="row"><button type="submit" class="btn pri">' + (edit ? 'Salvar cadastro' : 'Entrar no site') + '</button>' + (edit ? '<a class="btn" href="#/">Cancelar</a>' : '') + '</div>' +
-      '<p class="small mut" style="margin-top:.8rem">🔒 O cadastro fica salvo só neste aparelho; nada é enviado a servidor. O site não confere o pagamento: vale o que você informar.</p></form>';
+      '<p class="small mut" style="margin-top:.8rem">🔒 O cadastro fica salvo só neste aparelho; nada é enviado a servidor. O site não confere a inscrição nem o pagamento: vale o que você informar.</p></form>';
     $app.innerHTML = h;
+    Array.prototype.forEach.call($app.querySelectorAll('input[name=cc]'), function (c) {
+      c.onchange = function () { c.closest('.conc').querySelector('.nvs').hidden = !c.checked; };
+    });
     document.getElementById('cad').onsubmit = function (e) {
       e.preventDefault();
-      var nm = document.getElementById('cd-nome').value.replace(/\s+/g, ' ').trim();
-      var ns = Array.prototype.map.call($app.querySelectorAll('input[name=nv]:checked'), function (c) { return c.value; });
-      var err = document.getElementById('cd-err');
+      var nm = document.getElementById('cd-nome').value.replace(/\s+/g, ' ').trim(), err = document.getElementById('cd-err'), ins = [], falta = null;
       if (nm.length < 2) { err.textContent = 'Digite seu nome.'; document.getElementById('cd-nome').focus(); return; }
-      if (!ns.length) { err.textContent = 'Marque pelo menos um nível.'; return; }
-      var novo = !S.perfil;
-      S.perfil = { nome: nm, niveis: ns, criado: (S.perfil && S.perfil.criado) || Date.now() };
-      if (ns.indexOf(S.nivel) < 0) S.nivel = ns[0];
+      Array.prototype.forEach.call($app.querySelectorAll('input[name=cc]:checked'), function (c) {
+        var ns = Array.prototype.map.call($app.querySelectorAll('input[name="n-' + c.value + '"]:checked'), function (x) { return x.value; });
+        if (!ns.length) falta = falta || concInfo(c.value).nome;
+        ns.forEach(function (n) { ins.push({ c: c.value, n: n }); });
+      });
+      if (falta) { err.textContent = 'Marque o nível que você pagou no concurso ' + falta + '.'; return; }
+      if (!ins.length) { err.textContent = 'Marque pelo menos um concurso e o nível.'; return; }
+      var novo = !S.perfil, niveis = [];
+      ins.forEach(function (i) { if (niveis.indexOf(i.n) < 0) niveis.push(i.n); });
+      S.perfil = { nome: nm, insc: ins, niveis: niveis, criado: (S.perfil && S.perfil.criado) || Date.now() };
+      if (!ins.some(function (i) { return i.c === S.concurso && i.n === S.nivel; })) setAlvo(ins[0].c, ins[0].n);
       save();
-      if (ns.length > 1 && novo) nivelConfirmado = false; else marcaSessao();
+      if (ins.length > 1 && novo) nivelConfirmado = false; else marcaSessao();
       go('#/');
-      if (!nivelConfirmado) confirmarNivel();
-      else toast('Cadastro salvo');
+      if (!nivelConfirmado) confirmarNivel(); else toast('Cadastro salvo');
     };
   }
 
-  /* Trocar o nível ativo entre os níveis cadastrados */
+  /* Trocar a inscrição ativa */
   function vNivel() {
-    var atual = nvInfo(), reg = niveisReg();
-    var h = '<h1>Trocar de nível</h1><p class="small">Nível atual: <b>' + esc(atual.nome) + '</b>. <a href="#/">Manter e voltar</a></p><p class="mut">' + (reg.length > 1 ? 'Você se cadastrou em ' + reg.length + ' níveis. Escolha qual estudar agora; seu progresso nos tópicos em comum é mantido.' : 'Você se cadastrou em um nível. Para estudar outro, adicione-o ao seu cadastro.') + '</p>';
-    reg.forEach(function (id) {
-      var n = C.niveis.filter(function (x) { return x.id === id; })[0];
-      h += '<button class="card" style="display:block;width:100%;text-align:left;cursor:pointer;color:var(--ink);font:inherit;' + (id === S.nivel ? 'border:2px solid var(--pri)' : '') + '" data-n="' + n.id + '"><b>' + esc(n.nome) + (id === S.nivel ? ' · atual' : '') + '</b><div class="small mut">' + esc(n.desc) + '</div><div class="small" style="margin-top:.3rem"><span class="pill">' + C.materias.reduce(function (a, m) { return a + m.topicos.filter(function (t) { return t.nv.indexOf(n.id) >= 0; }).length; }, 0) + ' tópicos</span> ' + (C.dist[n.id].confirmada ? '<span class="pill ok">estrutura da prova confirmada</span>' : '<span class="pill warn">estrutura estimada</span>') + '</div></button>';
+    var reg = inscs();
+    var h = '<h1>Trocar de concurso</h1><p class="small">Estudando agora: <b>' + esc(rotulo({ c: S.concurso, n: S.nivel })) + '</b>. <a href="#/">Manter e voltar</a></p><p class="mut">' + (reg.length > 1 ? 'Você tem ' + reg.length + ' inscrições. Escolha qual estudar agora; o progresso nos tópicos em comum é mantido.' : 'Você tem uma inscrição. Para estudar outra, adicione-a ao seu cadastro.') + '</p>';
+    reg.forEach(function (i, k) {
+      var cc = concInfo(i.c), atual = i.c === S.concurso && i.n === S.nivel;
+      h += '<button class="card" style="display:block;width:100%;text-align:left;cursor:pointer;color:var(--ink);font:inherit;' + (atual ? 'border:2px solid var(--pri)' : '') + '" data-i="' + k + '"><b>' + esc(cc.nome) + ' · ' + esc(nomeNivel(i.n)) + (atual ? ' · atual' : '') + '</b><div class="small mut">' + esc(cc.completo) + ' · banca ' + esc(cc.banca) + '<br>Prova: ' + esc(provaTxt(cc)) + '</div><div class="small" style="margin-top:.3rem"><span class="pill">' + C.materias.reduce(function (a, m) { return a + m.topicos.filter(function (t) { return t.nv.indexOf(i.n) >= 0; }).length; }, 0) + ' tópicos</span> ' + (i.c === 'semed' && i.n === 'medio' ? '<span class="pill ok">estrutura confirmada</span>' : '<span class="pill warn">estrutura estimada</span>') + '</div></button>';
     });
-    h += '<p><a class="btn" href="#/cadastro">✎ Editar cadastro / adicionar nível</a></p>';
+    h += '<p><a class="btn" href="#/cadastro">✎ Editar cadastro / adicionar inscrição</a></p>';
     $app.innerHTML = h;
-    Array.prototype.forEach.call($app.querySelectorAll('[data-n]'), function (b) { b.onclick = function () { S.nivel = b.getAttribute('data-n'); marcaSessao(); save(); go('#/'); }; });
+    Array.prototype.forEach.call($app.querySelectorAll('[data-i]'), function (b) { b.onclick = function () { var i = reg[+b.getAttribute('data-i')]; setAlvo(i.c, i.n); marcaSessao(); save(); go('#/'); }; });
   }
 
   /* ---------- Foco na aprovação ---------- */
@@ -241,7 +265,7 @@
   function cardMeta() {
     var pr = prontidao(), tot = totQ(), meta = metaNota(), minQ = Math.ceil(tot * 0.5), alvoQ = Math.ceil(tot * meta / 100);
     var nota = pr.proj != null && pr.medido >= 0.5 ? Math.round(pr.proj * 100) : null;
-    var h = '<div class="card"><div class="row"><b>🎯 Meta: passar na prova</b><span class="sp"></span><span class="pill">' + esc(nvInfo().nome) + '</span></div>' +
+    var h = '<div class="card"><div class="row"><b>🎯 Meta: passar na prova</b><span class="sp"></span><span class="pill">' + esc(concInfo(S.concurso).nome + ' · ' + NV_CURTO[S.nivel]) + '</span></div>' +
       '<p class="small" style="margin:.4rem 0">Nota mínima: <b>' + minQ + ' de ' + tot + '</b> (50%). Sua meta, com margem: <b>' + alvoQ + ' de ' + tot + '</b> (' + meta + '%).</p>';
     if (nota == null) {
       h += '<div class="aviso">Ainda não dá para projetar sua nota. Faça o <b>diagnóstico</b> (mini-simulado) para descobrir seus pontos fracos.</div><p><a class="btn pri" href="#/simulados">Fazer diagnóstico</a></p>';
@@ -251,7 +275,7 @@
         '<div class="meter" aria-hidden="true"><i style="width:' + Math.min(100, nota) + '%"></i><b style="left:50%" title="nota mínima"></b><b class="alvo" style="left:' + meta + '%" title="sua meta"></b></div><div class="small mut" style="display:flex;justify-content:space-between"><span>0%</span><span>mín. 50%</span><span>meta ' + meta + '%</span></div>';
       if (pr.medido < 1) h += '<p class="small mut">Projeção com base nas matérias que você já treinou (' + Math.round(pr.medido * 100) + '% do peso da prova). Treine as demais para refinar.</p>';
     }
-    h += '<p class="small mut" style="margin:.4rem 0 0">' + (C.dist[S.nivel].confirmada ? '' : 'Estrutura estimada: confirme no edital do seu cargo. ') + 'A nota mínima não garante a vaga: a classificação depende também da linha de corte e dos outros candidatos.</p></div>';
+    h += '<p class="small mut" style="margin:.4rem 0 0">' + (estrConf() ? '' : 'Estrutura estimada: confirme no edital do seu cargo. ') + 'A nota mínima não garante a vaga: a classificação depende também da linha de corte e dos outros candidatos.</p></div>';
     return h;
   }
   function cardMissao() {
@@ -282,8 +306,10 @@
     var semIni = addDays(today(), -((new Date().getDay() + 6) % 7));
     var feitosSem = 0; Object.keys(S.done).forEach(function (k) { Object.keys(S.done[k]).forEach(function (vv) { if (iso(new Date(S.done[k][vv])) >= semIni) feitosSem++; }); });
     var geral = acc(function () { return true; });
-    var h = '<h1>Olá, ' + esc(primeiroNome()) + '! Vamos estudar?</h1><p class="small mut" style="margin-top:-.3rem">Nível: <b>' + esc(nvInfo().nome) + '</b> · <a href="#/' + (niveisReg().length > 1 ? 'nivel' : 'cadastro') + '">' + (niveisReg().length > 1 ? 'alternar nível' : 'editar cadastro') + '</a></p>';
-    h += '<div class="grid c2">' + C.provas.map(function (p) { var d = diasPara(p.data); return '<div class="card"><div class="mut small">Prova ' + esc(p.nome) + '</div><div class="stat">' + (d >= 0 ? d + ' dias' : 'Prova realizada') + '</div><div class="small mut">' + brDate(p.data.slice(0, 10)) + ' às ' + p.data.slice(11, 16).replace(':', 'h') + ' (confirmar no edital)</div></div>'; }).join('') + '</div>';
+    var cc = concInfo(S.concurso);
+    var h = '<h1>Olá, ' + esc(primeiroNome()) + '! Vamos estudar?</h1><p class="small mut" style="margin-top:-.3rem">Concurso: <b>' + esc(cc.nome) + ' (' + esc(cc.banca) + ')</b> · Nível: <b>' + esc(nvInfo().nome) + '</b> · <a href="#/' + (inscs().length > 1 ? 'nivel' : 'cadastro') + '">' + (inscs().length > 1 ? 'alternar' : 'editar cadastro') + '</a></p>';
+    if (cc.prova) { var d = diasPara(cc.prova); h += '<div class="card"><div class="mut small">Prova ' + esc(cc.nome) + ' (' + esc(cc.banca) + ')</div><div class="stat">' + (d >= 0 ? d + ' dias' : 'Prova realizada') + '</div><div class="small mut">' + esc(provaTxt(cc)) + ' (confirmar no edital)</div></div>'; }
+    else h += '<div class="card"><div class="mut small">Prova ' + esc(cc.nome) + ' (' + esc(cc.banca) + ')</div><div class="stat">Data a definir</div><div class="small mut">' + esc(cc.status) + ' <a target="_blank" rel="noopener" href="' + esc(cc.busca) + '">Acompanhar a banca</a>. Enquanto isso, o cronograma usa a prova da SEMED como referência.</div></div>';
     h += cardMeta() + cardMissao();
     h += '<div class="card"><div class="row"><b>' + esc(v.nome) + '</b></div><p class="small mut" style="margin:.3rem 0">Rotina do dia: teoria dirigida 60 min · questões 90 min · revisão ativa 30 min (resumo de 1 página + caderno de erros).</p>' + (prox ? '<a class="btn" href="#/aula/' + prox.m.id + '/' + prox.t.id + '">▶ Seguir a trilha: ' + esc(prox.t.titulo) + '</a>' : '<p>🎉 Você concluiu todos os tópicos desta volta.</p>') + '</div>';
     h += '<div class="grid c3"><div class="card"><div class="mut small">Revisões para hoje</div><div class="stat">' + due.length + '</div><a href="#/revisao">Abrir revisão</a></div>';
@@ -419,8 +445,8 @@
     if (cur) h += '<div class="card"><b>Você tem um simulado em andamento.</b><p><a class="btn pri" href="#/simulado">Continuar</a> <button class="btn" id="sim-drop">Descartar</button></p></div>';
     var D = C.dist[S.nivel], dq = D.q, tot = Object.keys(dq).reduce(function (a, k) { return a + dq[k]; }, 0), mins = Math.round(tot * 3.6);
     var dtxt = mats().map(function (m) { return m.nome.replace('Conhecimentos ', '').replace(' (RO e Porto Velho)', '') + ' ' + dq[m.id]; }).join(', ');
-    h += '<div class="card"><h3 style="margin-top:0">Simulado ' + esc(nvInfo().nome) + '</h3><p>' + tot + ' questões · ' + Math.floor(mins / 60) + ' h ' + pad(mins % 60) + ' min · distribuição: ' + esc(dtxt) + '.' + (S.nivel === 'medio' ? ' Ideal fazer às <b>9h15</b> de sábado, no horário real.' : '') + '</p>' +
-      (D.confirmada ? '' : '<p class="aviso">Estrutura <b>estimada</b>: não li o edital deste nível. Confira quantidade e distribuição reais no edital do seu cargo.</p>') +
+    h += '<div class="card"><h3 style="margin-top:0">Simulado ' + esc(nvInfo().nome) + '</h3><p>' + tot + ' questões · ' + Math.floor(mins / 60) + ' h ' + pad(mins % 60) + ' min · distribuição: ' + esc(dtxt) + '.' + (S.concurso === 'semed' && S.nivel === 'medio' ? ' Ideal fazer às <b>9h15</b> de sábado, no horário real.' : '') + '</p>' +
+      (estrConf() ? '' : '<p class="aviso">Estrutura <b>estimada</b>: não li o edital deste concurso/nível. Confira quantidade e distribuição reais no edital do seu cargo.</p>') +
       '<p class="small mut">Se o banco tiver menos questões que o necessário em uma matéria, o simulado usa as disponíveis. O banco tem ' + qsOf().length + ' questões neste nível; cada simulado sorteia dentre elas, então elas se repetem.</p><button class="btn pri" id="sim-full">Iniciar simulado completo</button></div>';
     h += '<div class="card"><h3 style="margin-top:0">Mini-simulado</h3><p>cerca de ' + Math.round(tot * 0.4) + ' questões · ' + Math.round(mins * 0.4) + ' minutos · proporcional.</p><button class="btn" id="sim-mini">Iniciar mini-simulado</button></div>';
     if (S.sims.length) {
@@ -549,7 +575,7 @@
   ];
   function vCron() {
     var t = today();
-    var h = '<h1>Cronograma</h1><p class="mut">Rotina semanal: seg Português · ter Lógica · qua Legislação · qui Específicos · sex revisão + Gerais · sáb simulado · dom caderno de erros. Datas: <b>conferir no edital oficial</b>.</p>';
+    var h = '<h1>Cronograma</h1><p class="mut">Rotina semanal: seg Português · ter Lógica · qua Legislação · qui Específicos · sex revisão + Gerais · sáb simulado · dom caderno de erros. Datas: <b>conferir no edital oficial</b>.</p>' + (S.concurso !== 'semed' ? '<div class="aviso">Este cronograma usa a prova da <b>SEMED (06/12/2026)</b> como referência. Para ' + esc(concInfo(S.concurso).nome) + ', ajuste as semanas quando sair a data oficial.</div>' : '');
     CRON.forEach(function (w) {
       var atual = t >= w.ini && t <= w.fim;
       h += '<div class="card" style="' + (atual ? 'border-color:var(--pri);border-width:2px' : '') + '"><div class="row"><b>' + esc(w.nome) + '</b>' + (atual ? '<span class="pill">esta semana</span>' : '') + '<span class="sp"></span><span class="small mut">' + brDate(w.ini).slice(0, 5) + ' a ' + brDate(w.fim).slice(0, 5) + '</span></div>' +
@@ -562,7 +588,7 @@
   /* ---------- Edital ---------- */
   function vEdital() {
     $app.innerHTML = '<h1>Edital e regras da prova</h1>' +
-      (S.nivel !== 'medio' ? '<div class="aviso">Esta tela resume o cargo de <b>nível médio</b> da SEMED. Para o seu nível (' + esc(nvInfo().nome) + '), consulte o Anexo I (cargos) e o Anexo IV (conteúdos) do edital: <b>A CONFIRMAR NO EDITAL</b>.</div>' : '') +
+      (!estrConf() ? '<div class="aviso">Esta tela resume o cargo de <b>nível médio</b> da SEMED (edital 24/2026). Para a sua inscrição (' + esc(rotulo({ c: S.concurso, n: S.nivel })) + ', banca ' + esc(concInfo(S.concurso).banca) + '), consulte o Anexo I (cargos) e o Anexo IV (conteúdos) do edital: <b>A CONFIRMAR NO EDITAL</b>.</div>' : '') +
       '<div class="aviso">Informações do corpo do <b>Edital SEMED nº 24/2026</b> (lido em 10/10/2026) e de reportagens de 3º. O <b>Anexo IV (conteúdos) não consta nesse PDF</b>: baixe-o no site da banca e compare com a trilha. <b>Nada aqui substitui o edital oficial.</b></div>' +
       '<div class="card"><h3 style="margin-top:0">Links oficiais</h3><div class="res"><a target="_blank" rel="noopener" href="https://www.ibgpconcursos.com.br">Site da banca IBGP (inscrição, anexos, avisos)</a><a target="_blank" rel="noopener" href="https://dhg1h5j42swfq.cloudfront.net/2026/09/29180921/00-edital-concurso-porto-velho_semed_final.pdf">PDF do edital SEMED nº 24/2026 (corpo, sem anexos)</a></div></div>' +
       '<div class="card"><h3 style="margin-top:0">SEMED · Agente de Secretaria Escolar (nível médio)</h3><table>' +
@@ -582,11 +608,11 @@
     $app.innerHTML = '<h1>Mais</h1><div class="card list">' + [['#/erros', '📓 Caderno de erros'], ['#/revisao', '🔁 Revisão espaçada'], ['#/cronograma', '📅 Cronograma'], ['#/edital', '📄 Edital e regras da prova'], ['#/config', '⚙️ Ajustes e backup']].map(function (x) { return '<a class="item" href="' + x[0] + '">' + x[1] + '</a>'; }).join('') + '</div>';
   }
   function vConfig() {
-    $app.innerHTML = '<h1>Ajustes</h1><div class="card"><h3 style="margin-top:0">Meu cadastro</h3><p class="small">' + esc(S.perfil.nome) + ' · ' + niveisReg().map(nomeNivel).map(esc).join(', ') + '</p><label for="nv">Nível que estou estudando</label><select id="nv">' + niveisReg().map(function (id) { return '<option value="' + id + '"' + (id === S.nivel ? ' selected' : '') + '>' + esc(nomeNivel(id)) + '</option>'; }).join('') + '</select><p class="small mut">Muda os tópicos, questões, simulado e apostilas. Seu progresso é mantido.</p><a class="btn sm" href="#/cadastro">✎ Editar cadastro / adicionar nível</a></div><div class="card"><h3 style="margin-top:0">Minha meta</h3><label for="mn">Meta de acertos na prova (%) - a nota mínima é 50%</label><input type="number" id="mn" min="50" max="100" value="' + metaNota() + '"><label for="mq">Questões por dia</label><input type="number" id="mq" min="5" max="200" value="' + (S.metaq || 30) + '"></div><div class="card"><label for="meta">Meta semanal (etapas concluídas por semana)</label><input type="number" id="meta" min="1" max="40" value="' + S.meta + '"></div>' +
+    $app.innerHTML = '<h1>Ajustes</h1><div class="card"><h3 style="margin-top:0">Meu cadastro</h3><p class="small">' + esc(S.perfil.nome) + ' · ' + inscs().map(rotulo).map(esc).join(', ') + '</p><label for="nv">Estou estudando para</label><select id="nv">' + inscs().map(function (i, k) { return '<option value="' + k + '"' + (i.c === S.concurso && i.n === S.nivel ? ' selected' : '') + '>' + esc(rotulo(i)) + '</option>'; }).join('') + '</select><p class="small mut">Muda os tópicos, questões, simulado e apostilas. Seu progresso é mantido.</p><a class="btn sm" href="#/cadastro">✎ Editar cadastro / adicionar nível</a></div><div class="card"><h3 style="margin-top:0">Minha meta</h3><label for="mn">Meta de acertos na prova (%) - a nota mínima é 50%</label><input type="number" id="mn" min="50" max="100" value="' + metaNota() + '"><label for="mq">Questões por dia</label><input type="number" id="mq" min="5" max="200" value="' + (S.metaq || 30) + '"></div><div class="card"><label for="meta">Meta semanal (etapas concluídas por semana)</label><input type="number" id="meta" min="1" max="40" value="' + S.meta + '"></div>' +
       '<div class="card"><h3 style="margin-top:0">Backup do progresso</h3><p class="small mut">Seu progresso fica salvo neste aparelho. Para levar a outro (celular ↔ PC), exporte e importe o arquivo.</p><div class="row"><button class="btn" id="exp">⬇ Exportar</button><label class="btn" for="imp" style="margin:0">⬆ Importar</label><input type="file" id="imp" accept=".json,application/json" hidden></div></div>' +
       '<div class="card"><h3 style="margin-top:0">Apostilas em PDF</h3><div class="res">' + mats().map(function (m) { return '<a target="_blank" rel="noopener" href="pdf/apostila-' + S.nivel + '-' + m.id + '.pdf">' + esc(m.nome) + '</a>'; }).join('') + '<a target="_blank" rel="noopener" href="pdf/apostila-' + S.nivel + '-completa.pdf"><b>Apostila completa (' + esc(nvInfo().nome) + ')</b></a></div></div>' +
       '<div class="card"><h3 style="margin-top:0">Zerar tudo</h3><button class="btn" id="rst" style="color:var(--bad)">Apagar progresso deste aparelho</button></div>';
-    document.getElementById('nv').onchange = function (e) { S.nivel = e.target.value; save(); toast('Nível: ' + nvInfo().nome); vConfig(); };
+    document.getElementById('nv').onchange = function (e) { var i = inscs()[+e.target.value]; setAlvo(i.c, i.n); save(); toast('Estudando: ' + rotulo(i)); vConfig(); };
     document.getElementById('mn').onchange = function (e) { S.metaNota = Math.min(100, Math.max(50, +e.target.value || 70)); save(); toast('Meta salva'); };
     document.getElementById('mq').onchange = function (e) { S.metaq = Math.min(200, Math.max(5, +e.target.value || 30)); save(); toast('Meta salva'); };
     document.getElementById('meta').onchange = function (e) { S.meta = Math.max(1, +e.target.value || 5); save(); toast('Meta salva'); };

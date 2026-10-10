@@ -95,3 +95,4 @@ table{width:100%;border-collapse:collapse;font-size:.92rem}th,td{padding:.4rem .
   .lesson .lvl h3.print-only{display:block}
 }
 .chip[hidden]+.icon-btn{margin-left:auto}
+@media(max-width:480px){.brand span:not(.logo){display:none}.chip{font-size:.78rem}}
