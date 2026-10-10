@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1d4ed8">
+<meta name="description" content="Sistema de estudo para os concursos de Porto Velho/RO 2026: trilha em 3 camadas, questões, simulados, caderno de erros e revisão espaçada. Funciona offline.">
+<title>Rota do Concurso - Porto Velho 2026</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="#/"><span class="logo" aria-hidden="true">📚</span><span>Rota do Concurso</span></a>
+  <nav class="side" id="sidenav" aria-label="Principal"></nav>
+  <button class="icon-btn" id="btn-theme" title="Alternar tema" aria-label="Alternar tema">◐</button>
+</header>
+<main id="app" tabindex="-1"></main>
+<nav class="bottom" id="bottomnav" aria-label="Principal"></nav>
+<noscript><p style="padding:1rem">Este site precisa de JavaScript ativado.</p></noscript>
+
+<script src="data/core.js"></script>
+<script src="data/portugues.js"></script>
+<script src="data/logica.js"></script>
+<script src="data/legislacao.js"></script>
+<script src="data/especificos.js"></script>
+<script src="data/gerais.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

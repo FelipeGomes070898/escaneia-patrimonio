@@ -1,0 +1,12 @@
+{
+  "name": "Rota do Concurso - Porto Velho 2026",
+  "short_name": "Rota do Concurso",
+  "description": "Sistema de estudo para os concursos de Porto Velho/RO 2026",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f6fb",
+  "theme_color": "#1d4ed8",
+  "lang": "pt-BR",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

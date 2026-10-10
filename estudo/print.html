@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Apostila - Rota do Concurso</title>
+<style>
+  body{font:12pt/1.5 Georgia,"Times New Roman",serif;color:#111;max-width:760px;margin:0 auto;padding:16px}
+  h1{font:700 22pt system-ui,sans-serif;margin:0 0 4pt}
+  h2{font:700 16pt system-ui,sans-serif;border-bottom:2px solid #1d4ed8;padding-bottom:3pt;margin:22pt 0 8pt;break-after:avoid}
+  h3{font:700 12.5pt system-ui,sans-serif;margin:12pt 0 3pt;color:#1d4ed8;break-after:avoid}
+  .capa{border:2px solid #1d4ed8;border-radius:8px;padding:14pt 16pt;margin-bottom:14pt}
+  .aviso{background:#fef3c7;border-left:4px solid #b45309;padding:6pt 10pt;font:10pt system-ui,sans-serif;margin:8pt 0}
+  .topico{break-inside:auto}
+  .q{margin:8pt 0;break-inside:avoid}
+  .alts{margin:3pt 0 0 0;padding-left:0;list-style:none}
+  .alts li{margin:2pt 0}
+  .mut{color:#555;font:10pt system-ui,sans-serif}
+  ul{padding-left:16pt}
+  .gab{break-before:page}
+  .gab p{margin:4pt 0;font-size:10.5pt}
+  .mat{break-before:page}
+  .mat:first-of-type{break-before:auto}
+</style>
+</head>
+<body>
+<div id="out"></div>
+<script src="data/core.js"></script>
+<script src="data/portugues.js"></script>
+<script src="data/logica.js"></script>
+<script src="data/legislacao.js"></script>
+<script src="data/especificos.js"></script>
+<script src="data/gerais.js"></script>
+<script>
+(function () {
+  var C = window.CONC, L = ['A', 'B', 'C', 'D', 'E'];
+  var id = new URLSearchParams(location.search).get('m') || 'all';
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  var ms = C.materias.filter(function (m) { return id === 'all' || m.id === id; });
+  var titulo = id === 'all' ? 'Apostila completa' : ms[0].nome;
+  document.title = 'Apostila - ' + titulo;
+  var h = '<div class="capa"><div class="mut">Concursos de Porto Velho/RO 2026 · Agente de Secretaria Escolar (SEMED, banca IBGP)</div><h1>' + esc(titulo) + '</h1>' +
+    '<div class="mut">Material original em 3 camadas: contexto → básico → aprofundado. Gerado em ' + new Date().toLocaleDateString('pt-BR') + '.</div></div>' +
+    '<div class="aviso"><b>Atenção:</b> o conteúdo é <b>provável</b>. O Anexo IV do edital nº 24/2026 (conteúdo programático oficial) não estava no PDF consultado; os itens marcados <b>A CONFIRMAR NO EDITAL</b> devem ser conferidos em www.ibgpconcursos.com.br. Textos e questões foram escritos do zero, sem copiar provas ou apostilas.</div>';
+  ms.forEach(function (m) {
+    h += '<section class="mat"><h1 style="color:' + m.cor + '">' + esc(m.nome) + '</h1><div class="mut">Prova SEMED: ' + m.questoes + ' questões (' + m.peso + ')</div><p class="mut">' + esc(m.banca) + '</p>';
+    m.topicos.forEach(function (t, i) {
+      h += '<div class="topico"><h2>' + (i + 1) + '. ' + esc(t.titulo) + '</h2>' +
+        '<h3>Contexto</h3>' + t.contexto + '<h3>Resumo básico</h3>' + t.basico + '<h3>Aprofundamento</h3>' + t.aprofundado + '</div>';
+    });
+    var qs = C.questoes.filter(function (q) { return q.m === m.id; });
+    h += '<h2>Exercícios</h2>';
+    qs.forEach(function (q, i) {
+      h += '<div class="q"><b>' + (i + 1) + '.</b> ' + esc(q.q) + '<ul class="alts">' + q.a.map(function (a, k) { return '<li>' + L[k] + ') ' + esc(a) + '</li>'; }).join('') + '</ul></div>';
+    });
+    h += '<div class="gab"><h2>Gabarito comentado - ' + esc(m.nome) + '</h2>' + qs.map(function (q, i) {
+      return '<p><b>' + (i + 1) + ' - ' + L[q.g] + '.</b> ' + esc(q.e) + '</p>';
+    }).join('') + '</div></section>';
+  });
+  document.getElementById('out').innerHTML = h;
+  document.body.setAttribute('data-ready', '1');
+})();
+</script>
+</body>
+</html>
