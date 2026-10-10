@@ -33,8 +33,8 @@ Depois do cadastro tudo gira em torno de passar no nível escolhido:
 | Painel | contagem regressiva das provas, rotina do dia, próxima aula, progresso por matéria |
 | Trilha | 5 matérias, de 17 a 29 tópicos conforme o nível, cada um em 3 níveis (contexto, básico, aprofundado) |
 | Aula | texto, links para **videoaulas no YouTube** e **PDFs resumidos no Google** (buscas prontas), seus próprios links, apostila em PDF, teste rápido, anotação de 3 linhas, conclusão por volta |
-| Questões | 95 questões originais com correção imediata e explicação |
-| Simulados | 50 questões / 3 h na distribuição da prova (10/10/10/15/5), ou mini de 20; correção por matéria e tópico |
+| Questões | 97 questões originais; ao responder, o site explica **cada alternativa**: por que a sua estava errada, por que a certa está certa e por que as outras não servem |
+| Simulados | 50 questões / 3 h na distribuição da prova (10/10/10/15/5), ou mini de 20; correção por matéria e tópico com comentário de cada alternativa. O histórico guarda cada simulado: dá para **abrir de novo a correção** ou **refazer o mesmo** |
 | Caderno de erros | entra sozinho ao errar; motivo (não sabia, confundi, desatenção) e a regra correta |
 | Revisão | agenda automática em 1, 7 e 21 dias após concluir uma etapa |
 | Cronograma | semanas 0 a 9 com checklist e datas |

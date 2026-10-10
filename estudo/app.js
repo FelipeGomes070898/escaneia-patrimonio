@@ -61,11 +61,11 @@
     });
     return { tries: tries, hits: hits, p: pct(hits, tries) };
   }
-  function record(q, ok) {
+  function record(q, ok, marcada) {
     var a = S.answers[q.id] || { tries: 0, hits: 0 };
     a.tries++; if (ok) a.hits++; a.last = ok; a.ts = Date.now(); S.answers[q.id] = a;
     S.dia = S.dia || {}; S.dia[today()] = (S.dia[today()] || 0) + 1;
-    if (!ok) { S.erros[q.id] = Object.assign(S.erros[q.id] || {}, { ts: Date.now(), res: false }); }
+    if (!ok) { S.erros[q.id] = Object.assign(S.erros[q.id] || {}, { ts: Date.now(), res: false }, marcada != null ? { minha: marcada } : {}); }
     else if (S.erros[q.id]) { S.erros[q.id].res = true; }
   }
   function markDone(m, t, v) {
@@ -118,7 +118,7 @@
     var v = p[1] || '';
     var fn = {
       '': vPainel, trilha: vTrilha, materia: function () { vMateria(p[2]); }, aula: function () { vAula(p[2], p[3]); },
-      praticar: vPraticar, quiz: function () { vQuiz(q); }, simulados: vSimulados, simulado: vSimRun, erros: vErros,
+      praticar: vPraticar, simrev: function () { vSimRev(p[2]); }, quiz: function () { vQuiz(q); }, simulados: vSimulados, simulado: vSimRun, erros: vErros,
       revisao: vRevisao, nivel: vNivel, cadastro: vCadastro, cronograma: vCron, edital: vEdital, config: vConfig, mais: vMais
     }[v] || vPainel;
     fn();
@@ -384,6 +384,20 @@
     Array.prototype.forEach.call($app.querySelectorAll('[data-del]'), function (b) { b.onclick = function () { S.links[k].splice(+b.getAttribute('data-del'), 1); save(); vAula(mid, tid); }; });
   }
 
+  /* Comentário de cada alternativa: por que a sua estava errada, por que a certa está certa e por que as outras não servem */
+  function blocoAlternativas(q, marcada) {
+    var x = C.x && C.x[q.id];
+    if (!x) return '';
+    function card(k, cls, titulo) {
+      return '<div class="alt-c ' + cls + '"><div class="alt-h">' + titulo + '</div><div class="alt-t"><b>' + LET[k] + ')</b> ' + esc(q.a[k]) + '</div><p>' + esc(x[k]) + '</p></div>';
+    }
+    var h = '<div class="alts-c"><h3 style="margin:.2rem 0 .4rem">Por que cada alternativa</h3>';
+    if (marcada != null && marcada !== q.g) h += card(marcada, 'chosen', '✘ Sua resposta: por que está errada');
+    h += card(q.g, 'right', marcada === q.g ? '✔ Você acertou: por que está certa' : '✔ Gabarito: por que está certa');
+    for (var k = 0; k < q.a.length; k++) if (k !== q.g && k !== marcada) h += card(k, 'other', '✘ Por que não é a resposta');
+    return h + '</div>';
+  }
+
   /* ---------- Quiz com correção imediata ---------- */
   function vPraticar() {
     var h = '<h1>Questões</h1><div class="card"><b>🎯 Treino focado na aprovação</b><p class="small mut" style="margin:.2rem 0 .5rem">Mistura questões dos tópicos que mais pesam na prova e onde você mais erra.</p><a class="btn pri" href="#/quiz?foco=1&n=10">Treino focado (10)</a> <a class="btn" href="#/quiz?foco=1&n=20">20 questões</a></div><div class="card"><label for="pm">Matéria</label><select id="pm"><option value="">Todas</option>' + mats().map(function (m) { return '<option value="' + m.id + '">' + esc(m.nome) + '</option>'; }).join('') + '</select>' +
@@ -417,12 +431,13 @@
       Array.prototype.forEach.call($app.querySelectorAll('.opt'), function (b) { b.onclick = function () { resp(+b.getAttribute('data-k')); }; });
     }
     function resp(k) {
-      var qu = list[i], ok = k === qu.g; record(qu, ok); save();
+      var qu = list[i], ok = k === qu.g; record(qu, ok, k); save();
       if (ok) acertos++; else errados.push(qu.id);
       Array.prototype.forEach.call($app.querySelectorAll('.opt'), function (b) {
         var n = +b.getAttribute('data-k'); b.disabled = true; if (n === qu.g) b.classList.add('right'); else if (n === k) b.classList.add('wrong');
       });
       var fb = '<div class="expl"><b>' + (ok ? '✔ Correto!' : '✘ Gabarito: ' + LET[qu.g]) + '</b><br>' + esc(qu.e) + '</div>';
+      fb += blocoAlternativas(qu, k);
       if (!ok) fb += '<div class="small mut">Por que errou? <span class="row" style="display:inline-flex">' + [['nao_sabia', 'Não sabia'], ['confundi', 'Confundi'], ['desatencao', 'Desatenção']].map(function (x) { return '<button class="btn sm" data-mot="' + x[0] + '">' + x[1] + '</button>'; }).join('') + '</span></div>';
       fb += '<p><button class="btn pri" id="nx">' + (i + 1 < list.length ? 'Próxima →' : 'Ver resultado') + '</button></p>';
       document.getElementById('fb').innerHTML = fb;
@@ -450,7 +465,7 @@
       '<p class="small mut">Se o banco tiver menos questões que o necessário em uma matéria, o simulado usa as disponíveis. O banco tem ' + qsOf().length + ' questões neste nível; cada simulado sorteia dentre elas, então elas se repetem.</p><button class="btn pri" id="sim-full">Iniciar simulado completo</button></div>';
     h += '<div class="card"><h3 style="margin-top:0">Mini-simulado</h3><p>cerca de ' + Math.round(tot * 0.4) + ' questões · ' + Math.round(mins * 0.4) + ' minutos · proporcional.</p><button class="btn" id="sim-mini">Iniciar mini-simulado</button></div>';
     if (S.sims.length) {
-      h += '<h2>Histórico</h2><div class="card"><table><tr><th>Data</th><th>Questões</th><th>Acertos</th><th>Tempo</th></tr>' + S.sims.slice().reverse().map(function (s) { return '<tr><td>' + brDate(s.dia) + '</td><td>' + s.total + '</td><td>' + s.acertos + ' (' + pct(s.acertos, s.total) + '%)</td><td>' + Math.round(s.gasto / 60) + ' min</td></tr>'; }).join('') + '</table></div>';
+      h += '<h2>Histórico</h2><div class="card" style="overflow-x:auto"><table><tr><th>Data</th><th>Questões</th><th>Acertos</th><th>Tempo</th><th></th></tr>' + S.sims.map(function (x, k) { return { x: x, k: k }; }).reverse().map(function (o) { var x = o.x; return '<tr><td>' + brDate(x.dia) + '</td><td>' + x.total + '</td><td>' + x.acertos + ' (' + pct(x.acertos, x.total) + '%)</td><td>' + Math.round(x.gasto / 60) + ' min</td><td>' + (x.ids ? '<a class="btn sm" href="#/simrev/' + o.k + '">Abrir</a>' : '<span class="small mut">sem detalhe</span>') + '</td></tr>'; }).join('') + '</table><p class="small mut" style="margin:.5rem 0 0">Toque em Abrir para rever a correção comentada ou refazer o mesmo simulado.</p></div>';
     }
     $app.innerHTML = h;
     function start(factor, dur) {
@@ -495,32 +510,50 @@
     timerId = setInterval(function () { var t = document.getElementById('tm'); if (!t) return; var l = left(); t.textContent = fmt(l); if (l <= 0) { clearInterval(timerId); toast('Tempo esgotado!'); finish(s); } }, 1000);
   }
   function finish(s) {
-    var acertos = 0, porM = {}, porT = {};
+    var acertos = 0;
     s.ids.forEach(function (id) {
       var q = qById(id), r = s.resp[id], ok = r === q.g;
-      if (r != null) record(q, ok); else { /* em branco: conta como não acertada, sem entrar no caderno */ }
-      if (r != null && !ok) { S.erros[id] = Object.assign(S.erros[id] || {}, { ts: Date.now(), res: false, motivo: S.erros[id] && S.erros[id].motivo }); }
+      if (r != null) record(q, ok, r); /* em branco: conta como não acertada, sem entrar no caderno */
       if (ok) acertos++;
+    });
+    var gasto = Math.min(s.dur, Math.floor((Date.now() - s.ini) / 1000));
+    var e = { dia: today(), total: s.ids.length, acertos: acertos, gasto: gasto, dur: s.dur, ids: s.ids.slice(), resp: s.resp, c: S.concurso, n: S.nivel };
+    S.sims.push(e); save();
+    saveSim(null);
+    mostrarResultado(e, true);
+  }
+  /* Rever um simulado já feito (histórico) */
+  function vSimRev(i) {
+    var e = S.sims[+i];
+    if (!e || !e.ids) return go('#/simulados');
+    mostrarResultado(e, false);
+  }
+  function mostrarResultado(e, novo) {
+    var porM = {}, porT = {}, acertos = 0;
+    e.ids.forEach(function (id) {
+      var q = qById(id); if (!q) return;
+      var ok = e.resp[id] === q.g; if (ok) acertos++;
       porM[q.m] = porM[q.m] || { a: 0, t: 0 }; porM[q.m].t++; if (ok) porM[q.m].a++;
       var kk = q.m + '/' + q.t; porT[kk] = porT[kk] || { a: 0, t: 0 }; porT[kk].t++; if (ok) porT[kk].a++;
     });
-    var gasto = Math.min(s.dur, Math.floor((Date.now() - s.ini) / 1000));
-    S.sims.push({ dia: today(), total: s.ids.length, acertos: acertos, gasto: gasto, porM: porM }); save();
-    saveSim(null);
-    var p = pct(acertos, s.ids.length);
-    var h = '<h1>Resultado do simulado</h1><div class="card"><div class="stat">' + acertos + ' / ' + s.ids.length + ' (' + p + '%)</div>' + bar(p) +
+    var total = e.ids.length, gasto = e.gasto, p = pct(acertos, total);
+    var h = (novo ? '' : '<p><a href="#/simulados">← Simulados</a></p>') + '<h1>' + (novo ? 'Resultado do simulado' : 'Simulado de ' + brDate(e.dia)) + '</h1>' + (!novo && e.c ? '<p class="small mut">' + esc(concInfo(e.c).nome + ' · ' + nomeNivel(e.n)) + '</p>' : '') + '<div class="card"><div class="stat">' + acertos + ' / ' + total + ' (' + p + '%)</div>' + bar(p) +
       '<p>' + (p >= 50 ? '<span class="pill ok">Acima dos 50% exigidos de nota mínima</span>' : '<span class="pill bad">Abaixo dos 50% de nota mínima</span>') + ' <span class="small mut">Tempo usado: ' + Math.round(gasto / 60) + ' min. A nota mínima de aprovação é 50% do total de pontos (edital 24/2026, item 10.1); a classificação depende também da linha de corte.</span></p></div>';
-    var alvoQ = Math.ceil(s.ids.length * metaNota() / 100), minQ = Math.ceil(s.ids.length * 0.5);
-    h += '<div class="card"><b>🎯 Rumo à aprovação</b><p style="margin:.3rem 0">' + (acertos >= alvoQ ? 'Você atingiu a sua meta (' + alvoQ + ' acertos).' : 'Faltaram <b>' + (alvoQ - acertos) + '</b> acerto(s) para a sua meta (' + alvoQ + ')' + (acertos < minQ ? ' e <b>' + (minQ - acertos) + '</b> para a nota mínima (' + minQ + ')' : '') + '.') + '</p><a class="btn pri" href="#/quiz?foco=1&n=10">Treinar pontos fracos agora</a></div>';
+    var alvoQ = Math.ceil(total * metaNota() / 100), minQ = Math.ceil(total * 0.5);
+    h += '<div class="card"><b>🎯 Rumo à aprovação</b><p style="margin:.3rem 0">' + (acertos >= alvoQ ? 'Você atingiu a sua meta (' + alvoQ + ' acertos).' : 'Faltaram <b>' + (alvoQ - acertos) + '</b> acerto(s) para a sua meta (' + alvoQ + ')' + (acertos < minQ ? ' e <b>' + (minQ - acertos) + '</b> para a nota mínima (' + minQ + ')' : '') + '.') + '</p><div class="row"><a class="btn pri" href="#/quiz?foco=1&n=10">Treinar pontos fracos agora</a>' + (e.dur ? '<button class="btn" id="sr-again">Refazer este simulado</button>' : '') + '</div></div>';
     h += '<h2>Por matéria</h2><div class="card">' + Object.keys(porM).map(function (m) { var x = porM[m]; return '<div style="margin:.5rem 0"><div class="row"><b>' + esc(mat(m).nome) + '</b><span class="sp"></span>' + x.a + '/' + x.t + '</div>' + bar(pct(x.a, x.t), mat(m).cor) + '</div>'; }).join('') + '</div>';
     var fracos = Object.keys(porT).filter(function (k) { return porT[k].a < porT[k].t; }).sort(function (a, b) { return pct(porT[a].a, porT[a].t) - pct(porT[b].a, porT[b].t); });
     h += '<h2>Tópicos para reforçar</h2><div class="card list">' + (fracos.length ? fracos.map(function (k) { var pp = k.split('/'); return '<a class="item" href="#/aula/' + pp[0] + '/' + pp[1] + '"><span style="flex:1">' + esc(topico(pp[0], pp[1]).titulo) + '</span><span class="small mut">' + porT[k].a + '/' + porT[k].t + '</span></a>'; }).join('') : '<p>Parabéns, nenhum erro!</p>') + '</div>';
-    h += '<h2>Correção comentada</h2>' + s.ids.map(function (id, n) {
-      var q = qById(id), r = s.resp[id], ok = r === q.g;
-      return '<div class="card"><div class="row"><b>' + (n + 1) + '.</b> <span class="pill ' + (ok ? 'ok' : 'bad') + '">' + (r == null ? 'em branco' : ok ? 'acertou' : 'errou') + '</span></div><p>' + esc(q.q) + '</p><p class="small">Sua resposta: ' + (r == null ? '--' : LET[r] + ') ' + esc(q.a[r])) + '<br>Gabarito: <b>' + LET[q.g] + ') ' + esc(q.a[q.g]) + '</b></p><div class="expl small">' + esc(q.e) + '</div></div>';
+    h += '<h2>Correção comentada</h2><p class="small mut">Toque em "Por que cada alternativa" para ver a explicação de todas as opções.</p>' + e.ids.map(function (id, n) {
+      var q = qById(id); if (!q) return '';
+      var r = e.resp[id], ok = r === q.g;
+      return '<div class="card"><div class="row"><b>' + (n + 1) + '.</b> <span class="pill ' + (ok ? 'ok' : 'bad') + '">' + (r == null ? 'em branco' : ok ? 'acertou' : 'errou') + '</span><span class="sp"></span><span class="small mut">' + esc(mat(q.m).nome) + '</span></div><p>' + esc(q.q) + '</p><p class="small">Sua resposta: ' + (r == null ? '--' : LET[r] + ') ' + esc(q.a[r])) + '<br>Gabarito: <b>' + LET[q.g] + ') ' + esc(q.a[q.g]) + '</b></p><div class="expl small">' + esc(q.e) + '</div>' +
+        (C.x && C.x[q.id] ? '<details class="det-alts"' + (ok ? '' : ' open') + '><summary>Por que cada alternativa</summary>' + blocoAlternativas(q, r) + '</details>' : '') + '</div>';
     }).join('');
     h += '<p><a class="btn pri" href="#/erros">Ver caderno de erros</a> <a class="btn" href="#/simulados">Novo simulado</a></p>';
     $app.innerHTML = h; window.scrollTo(0, 0);
+    var ag = document.getElementById('sr-again');
+    if (ag) ag.onclick = function () { saveSim({ ids: e.ids.slice(), resp: {}, marc: {}, i: 0, ini: Date.now(), dur: e.dur, fim: null }); go('#/simulado'); };
   }
 
   /* ---------- Caderno de erros ---------- */
@@ -534,7 +567,7 @@
     if (!ids.length) h += '<div class="card">Nenhum erro registrado ainda. Faça questões ou simulados!</div>';
     ids.sort(function (a, b) { return S.erros[b].ts - S.erros[a].ts; }).forEach(function (id) {
       var q = qById(id), e = S.erros[id];
-      h += '<div class="card" style="' + (e.res ? 'opacity:.65' : '') + '"><div class="row small mut">' + esc(mat(q.m).nome) + ' · ' + esc(topico(q.m, q.t).titulo) + '<span class="sp"></span>' + (e.res ? '<span class="pill ok">resolvido</span>' : '<span class="pill bad">aberto</span>') + '</div><p>' + esc(q.q) + '</p><p class="small">Gabarito: <b>' + LET[q.g] + ') ' + esc(q.a[q.g]) + '</b></p><div class="expl small"><b>Regra:</b> ' + esc(q.e) + '</div>' +
+      h += '<div class="card" style="' + (e.res ? 'opacity:.65' : '') + '"><div class="row small mut">' + esc(mat(q.m).nome) + ' · ' + esc(topico(q.m, q.t).titulo) + '<span class="sp"></span>' + (e.res ? '<span class="pill ok">resolvido</span>' : '<span class="pill bad">aberto</span>') + '</div><p>' + esc(q.q) + '</p><p class="small">Gabarito: <b>' + LET[q.g] + ') ' + esc(q.a[q.g]) + '</b></p><div class="expl small"><b>Regra:</b> ' + esc(q.e) + '</div>' + (C.x && C.x[q.id] ? '<details class="det-alts"><summary>Por que cada alternativa</summary>' + blocoAlternativas(q, e.minha) + '</details>' : '') +
         '<label class="small" for="mt-' + id + '">Motivo do erro</label><select data-mot="' + id + '"><option value="">Escolher...</option>' + Object.keys(MOT).map(function (m) { return '<option value="' + m + '"' + (e.motivo === m ? ' selected' : '') + '>' + MOT[m] + '</option>'; }).join('') + '</select>' +
         '<p><a class="btn sm" href="#/quiz?ids=' + id + '&n=1">Refazer</a> <a class="btn sm" href="#/aula/' + q.m + '/' + q.t + '">Ver aula</a></p></div>';
     });

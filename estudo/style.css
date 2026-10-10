@@ -96,3 +96,13 @@ table{width:100%;border-collapse:collapse;font-size:.92rem}th,td{padding:.4rem .
 }
 .chip[hidden]+.icon-btn{margin-left:auto}
 @media(max-width:480px){.brand span:not(.logo){display:none}.chip{font-size:.78rem}}
+
+.alts-c{margin:.6rem 0}
+.alt-c{border:1px solid var(--line);border-left-width:5px;border-radius:12px;padding:.55rem .75rem;margin:.5rem 0;background:var(--card)}
+.alt-c .alt-h{font-size:.8rem;font-weight:700;letter-spacing:.02em;margin-bottom:.15rem}
+.alt-c .alt-t{margin:0 0 .15rem}
+.alt-c p{margin:.15rem 0 0;font-size:.95rem}
+.alt-c.right{border-left-color:var(--ok);background:var(--okbg)}.alt-c.right .alt-h{color:var(--ok)}
+.alt-c.chosen{border-left-color:var(--bad);background:var(--badbg)}.alt-c.chosen .alt-h{color:var(--bad)}
+.alt-c.other{border-left-color:var(--mut)}.alt-c.other .alt-h{color:var(--mut)}
+.det-alts{margin-top:.5rem}.det-alts>summary{cursor:pointer;font-weight:700;color:var(--pri);padding:.4rem 0}

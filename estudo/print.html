@@ -19,6 +19,9 @@
   ul{padding-left:16pt}
   .gab{break-before:page}
   .gab p{margin:4pt 0;font-size:10.5pt}
+  .gq{break-inside:avoid;margin-bottom:6pt}
+  .gx{margin:2pt 0 4pt 0;padding-left:14pt;font-size:9.5pt;list-style:none}
+  .gx li{margin:1pt 0}
   .mat{break-before:page}
   .mat:first-of-type{break-before:auto}
 </style>
@@ -32,6 +35,11 @@
 <script src="data/especificos.js"></script>
 <script src="data/gerais.js"></script>
 <script src="data/superior.js"></script>
+<script src="data/coment-portugues.js"></script>
+<script src="data/coment-logica.js"></script>
+<script src="data/coment-legislacao.js"></script>
+<script src="data/coment-especificos.js"></script>
+<script src="data/coment-gerais.js"></script>
 <script>
 (function () {
   var C = window.CONC, L = ['A', 'B', 'C', 'D', 'E'];
@@ -58,7 +66,8 @@
       h += '<div class="q"><b>' + (i + 1) + '.</b> ' + esc(q.q) + '<ul class="alts">' + q.a.map(function (a, k) { return '<li>' + L[k] + ') ' + esc(a) + '</li>'; }).join('') + '</ul></div>';
     });
     h += '<div class="gab"><h2>Gabarito comentado - ' + esc(m.nome) + '</h2>' + qs.map(function (q, i) {
-      return '<p><b>' + (i + 1) + ' - ' + L[q.g] + '.</b> ' + esc(q.e) + '</p>';
+      var x = C.x && C.x[q.id];
+      return '<div class="gq"><p><b>' + (i + 1) + ' - ' + L[q.g] + '.</b> ' + esc(q.e) + '</p>' + (x ? '<ul class="gx">' + x.map(function (t, k) { return '<li><b>' + L[k] + (k === q.g ? ' (certa)' : '') + ':</b> ' + esc(t) + '</li>'; }).join('') + '</ul>' : '') + '</div>';
     }).join('') + '</div></section>';
   });
   document.getElementById('out').innerHTML = h;
