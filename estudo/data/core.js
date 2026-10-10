@@ -44,6 +44,11 @@ function Q(m, t, n, enun, alts, g, e) {
   CONC.questoes.push({ id: k + '-' + __qc[k], m: m, t: t, n: n, q: enun, a: alts, g: g, e: e });
 }
 
+/* X: comentário de cada alternativa (A a E) de uma questão, pelo id da questão.
+   Aparece na correção: por que a alternativa certa está certa e por que cada uma das outras não serve. */
+CONC.x = {};
+function X(id, arr) { CONC.x[id] = arr; }
+
 /* Datas (fonte: Edital nº 24/2026 SEMED e levantamento de 10/10/2026; conferir no edital oficial) */
 CONC.provas = [
   { id: 'semed', nome: 'SEMED (IBGP)', data: '2026-12-06T09:15:00-04:00' },
