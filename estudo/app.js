@@ -97,7 +97,8 @@
   ];
   var SIDE = NAV.slice(0, 4).concat([['#/erros', 'Erros', '📓'], ['#/revisao', 'Revisão', '🔁'], ['#/cronograma', 'Cronograma', '📅'], ['#/edital', 'Edital', '📄'], ['#/config', 'Ajustes', '⚙️']]);
   function drawNav(h) {
-    var cur = h.split('?')[0];
+    var cur = h.split('?')[0], chip = document.getElementById('nvchip'), ni = nvInfo();
+    if (chip) { chip.hidden = !ni; chip.textContent = ni ? '🎓 ' + ni.nome : ''; chip.title = 'Seu nível cadastrado. Toque para trocar.'; }
     function on(href) { if (href === '#/') return cur === '#/' || cur === ''; if (href === '#/mais') return ['#/mais', '#/erros', '#/revisao', '#/cronograma', '#/edital', '#/config'].indexOf(cur) >= 0; return cur.indexOf(href) === 0 || (href === '#/trilha' && /^#\/(materia|aula)/.test(cur)) || (href === '#/praticar' && cur.indexOf('#/quiz') === 0); }
     document.getElementById('sidenav').innerHTML = SIDE.map(function (n) { return '<a href="' + n[0] + '" class="' + (on(n[0]) ? 'on' : '') + '">' + n[1] + '</a>'; }).join('');
     document.getElementById('bottomnav').innerHTML = NAV.map(function (n) { return '<a href="' + n[0] + '" class="' + (on(n[0]) ? 'on' : '') + '"><span class="ic">' + n[2] + '</span>' + n[1] + '</a>'; }).join('');
@@ -115,7 +116,7 @@
     var fn = {
       '': vPainel, trilha: vTrilha, materia: function () { vMateria(p[2]); }, aula: function () { vAula(p[2], p[3]); },
       praticar: vPraticar, quiz: function () { vQuiz(q); }, simulados: vSimulados, simulado: vSimRun, erros: vErros,
-      revisao: vRevisao, cronograma: vCron, edital: vEdital, config: vConfig, mais: vMais
+      revisao: vRevisao, nivel: vNivel, cronograma: vCron, edital: vEdital, config: vConfig, mais: vMais
     }[v] || vPainel;
     fn();
     window.scrollTo(0, 0);
@@ -123,15 +124,32 @@
   window.addEventListener('hashchange', route);
   function go(h) { if (location.hash === h) route(); else location.hash = h; }
 
+  /* ---------- Confirmação do nível ao entrar no site ---------- */
+  var nivelConfirmado = false;
+  try { nivelConfirmado = sessionStorage.getItem('estudo.nvok') === '1'; } catch (e) { }
+  function confirmarNivel() {
+    var n = nvInfo();
+    if (!n || nivelConfirmado || (location.hash || '').indexOf('#/nivel') === 0) return;
+    var o = document.createElement('div'); o.className = 'modal';
+    var ntop = C.materias.reduce(function (a, m) { return a + topsOf(m).length; }, 0);
+    o.innerHTML = '<div class="box" role="dialog" aria-modal="true" aria-labelledby="nvt"><div class="small mut">Você está cadastrado(a) para estudar no nível:</div><h2 id="nvt" style="margin:.2rem 0">🎓 ' + esc(n.nome) + '</h2><p class="small">' + esc(n.desc) + '</p><p class="small mut">' + ntop + ' tópicos · ' + (C.dist[n.id].confirmada ? 'estrutura da prova confirmada no edital' : 'estrutura da prova estimada (confira no edital do seu cargo)') + '</p><p><b>Esse é o nível do concurso que você vai fazer?</b></p><div class="row"><button class="btn pri" id="nv-ok">Sim, é esse</button><button class="btn" id="nv-troca">Trocar nível</button></div></div>';
+    document.body.appendChild(o);
+    function fecha() { nivelConfirmado = true; try { sessionStorage.setItem('estudo.nvok', '1'); } catch (e) { } o.remove(); }
+    o.querySelector('#nv-ok').onclick = fecha;
+    o.querySelector('#nv-troca').onclick = function () { fecha(); go('#/nivel'); };
+    o.querySelector('#nv-ok').focus();
+  }
+
   /* ---------- Escolha do nível ---------- */
   function vNivel() {
     document.getElementById('sidenav').innerHTML = ''; document.getElementById('bottomnav').innerHTML = '';
-    var h = '<h1>Qual é o seu nível de escolaridade?</h1><p class="mut">O estudo (tópicos, questões, simulado e apostilas) é montado conforme o nível do cargo que você vai disputar. Você pode mudar depois em Ajustes.</p>';
+    var atual = nvInfo();
+    var h = '<h1>' + (atual ? 'Trocar nível de escolaridade' : 'Qual é o seu nível de escolaridade?') + '</h1>' + (atual ? '<p class="small">Nível cadastrado hoje: <b>' + esc(atual.nome) + '</b>. <a href="#/">Manter e voltar</a></p>' : '') + '<p class="mut">O estudo (tópicos, questões, simulado e apostilas) é montado conforme o nível do cargo que você vai disputar. Você pode mudar depois em Ajustes.</p>';
     C.niveis.forEach(function (n) {
       h += '<button class="card" style="display:block;width:100%;text-align:left;cursor:pointer;color:var(--ink);font:inherit" data-n="' + n.id + '"><b>' + esc(n.nome) + '</b><div class="small mut">' + esc(n.desc) + '</div><div class="small" style="margin-top:.3rem"><span class="pill">' + C.materias.reduce(function (a, m) { return a + m.topicos.filter(function (t) { return t.nv.indexOf(n.id) >= 0; }).length; }, 0) + ' tópicos</span> ' + (C.dist[n.id].confirmada ? '<span class="pill ok">estrutura da prova confirmada</span>' : '<span class="pill warn">estrutura estimada</span>') + '</div></button>';
     });
     $app.innerHTML = h;
-    Array.prototype.forEach.call($app.querySelectorAll('[data-n]'), function (b) { b.onclick = function () { S.nivel = b.getAttribute('data-n'); save(); go('#/'); }; });
+    Array.prototype.forEach.call($app.querySelectorAll('[data-n]'), function (b) { b.onclick = function () { S.nivel = b.getAttribute('data-n'); nivelConfirmado = true; try { sessionStorage.setItem('estudo.nvok', '1'); } catch (e) { } save(); go('#/'); }; });
   }
 
   /* ---------- Painel ---------- */
@@ -466,4 +484,5 @@
   /* ---------- Início ---------- */
   if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) navigator.serviceWorker.register('sw.js').catch(function () { });
   route();
+  confirmarNivel();
 })();
