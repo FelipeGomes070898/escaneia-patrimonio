@@ -1,5 +1,5 @@
 /* Cache para uso offline (rede primeiro, para nunca ficar preso a uma versão antiga). Troque a versão ao alterar arquivos. */
-var CACHE = 'rota-concurso-v7';
+var CACHE = 'rota-concurso-v8';
 var ARQUIVOS = ['./', 'index.html', 'style.css', 'app.js', 'manifest.json', 'icon.svg',
   'data/core.js', 'data/portugues.js', 'data/logica.js', 'data/legislacao.js', 'data/especificos.js', 'data/gerais.js', 'data/superior.js'];
 self.addEventListener('install', function (e) { e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(ARQUIVOS); }).then(function () { return self.skipWaiting(); })); });
