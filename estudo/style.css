@@ -23,7 +23,9 @@ h1{font-size:1.5rem;margin:.2rem 0 .6rem}h2{font-size:1.2rem;margin:1.2rem 0 .5r
 .topbar{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:.8rem;padding:.6rem 16px;background:var(--card);border-bottom:1px solid var(--line)}
 .brand{display:flex;align-items:center;gap:.5rem;font-weight:700;color:var(--ink);text-decoration:none;white-space:nowrap}
 .logo{font-size:1.4rem}
-.icon-btn{margin-left:auto;background:none;border:1px solid var(--line);border-radius:10px;width:40px;height:40px;font-size:1.1rem;color:var(--ink);cursor:pointer}
+.chip{margin-left:auto;padding:.3rem .7rem;border-radius:99px;background:var(--sel);color:var(--pri);font-size:.82rem;font-weight:700;text-decoration:none;white-space:nowrap}
+.chip[hidden]{display:none}
+.icon-btn{margin-left:0;background:none;border:1px solid var(--line);border-radius:10px;width:40px;height:40px;font-size:1.1rem;color:var(--ink);cursor:pointer}
 .side{display:none;gap:.2rem;margin-left:1rem;flex-wrap:wrap}
 .side a,.bottom a{color:var(--mut);text-decoration:none;font-weight:600}
 .side a{padding:.4rem .7rem;border-radius:10px;font-size:.95rem}
@@ -88,3 +90,4 @@ table{width:100%;border-collapse:collapse;font-size:.92rem}th,td{padding:.4rem .
   .lvl{display:block!important}
   .lesson .lvl h3.print-only{display:block}
 }
+.chip[hidden]+.icon-btn{margin-left:auto}

@@ -6,7 +6,7 @@
   var $app = document.getElementById('app');
 
   /* ---------- Estado ---------- */
-  function defaults() { return { done: {}, answers: {}, erros: {}, rev: {}, notas: {}, links: {}, sims: [], cron: {}, meta: 5, tema: '' }; }
+  function defaults() { return { done: {}, answers: {}, erros: {}, rev: {}, notas: {}, links: {}, sims: [], cron: {}, meta: 5, tema: '', nivel: '' }; }
   var S = (function () { try { return Object.assign(defaults(), JSON.parse(localStorage.getItem(LS) || '{}')); } catch (e) { return defaults(); } })();
   function save() { try { localStorage.setItem(LS, JSON.stringify(S)); } catch (e) { /* sem armazenamento: segue em memória */ } }
   function loadSim() { try { return JSON.parse(localStorage.getItem(LSSIM) || 'null'); } catch (e) { return null; } }
@@ -22,8 +22,12 @@
   function shuffle(a) { a = a.slice(); for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
   function mat(id) { return C.materias.filter(function (m) { return m.id === id; })[0]; }
   function topico(m, t) { var mm = mat(m); return mm && mm.topicos.filter(function (x) { return x.id === t; })[0]; }
+  function nvInfo() { return C.niveis.filter(function (n) { return n.id === S.nivel; })[0]; }
+  function topsOf(m) { return m.topicos.filter(function (t) { return t.nv.indexOf(S.nivel) >= 0; }); }
+  function mats() { return C.materias.filter(function (m) { return topsOf(m).length; }); }
+  function visivel(mid, tid) { var t = topico(mid, tid); return !!t && t.nv.indexOf(S.nivel) >= 0; }
   function qById(id) { return C.questoes.filter(function (q) { return q.id === id; })[0]; }
-  function qsOf(m, t) { return C.questoes.filter(function (q) { return (!m || q.m === m) && (!t || q.t === t); }); }
+  function qsOf(m, t) { return C.questoes.filter(function (q) { return (!m || q.m === m) && (!t || q.t === t) && visivel(q.m, q.t); }); }
   function tkey(m, t) { return m + '/' + t; }
   function ask(msg, yes) {
     var o = document.createElement('div'); o.className = 'modal';
@@ -48,7 +52,7 @@
 
   /* ---------- Progresso ---------- */
   function topicDone(m, t, v) { var d = S.done[tkey(m, t)]; return !!(d && d['v' + v]); }
-  function matProgress(m, v) { var mm = mat(m); var n = 0; mm.topicos.forEach(function (t) { if (topicDone(m, t.id, v)) n++; }); return n; }
+  function matProgress(m, v) { var mm = mat(m); var n = 0; topsOf(mm).forEach(function (t) { if (topicDone(m, t.id, v)) n++; }); return n; }
   function acc(filter) {
     var tries = 0, hits = 0;
     Object.keys(S.answers).forEach(function (id) {
@@ -93,7 +97,8 @@
   ];
   var SIDE = NAV.slice(0, 4).concat([['#/erros', 'Erros', '📓'], ['#/revisao', 'Revisão', '🔁'], ['#/cronograma', 'Cronograma', '📅'], ['#/edital', 'Edital', '📄'], ['#/config', 'Ajustes', '⚙️']]);
   function drawNav(h) {
-    var cur = h.split('?')[0];
+    var cur = h.split('?')[0], chip = document.getElementById('nvchip'), ni = nvInfo();
+    if (chip) { chip.hidden = !ni; chip.textContent = ni ? '🎓 ' + ni.nome : ''; chip.title = 'Seu nível cadastrado. Toque para trocar.'; }
     function on(href) { if (href === '#/') return cur === '#/' || cur === ''; if (href === '#/mais') return ['#/mais', '#/erros', '#/revisao', '#/cronograma', '#/edital', '#/config'].indexOf(cur) >= 0; return cur.indexOf(href) === 0 || (href === '#/trilha' && /^#\/(materia|aula)/.test(cur)) || (href === '#/praticar' && cur.indexOf('#/quiz') === 0); }
     document.getElementById('sidenav').innerHTML = SIDE.map(function (n) { return '<a href="' + n[0] + '" class="' + (on(n[0]) ? 'on' : '') + '">' + n[1] + '</a>'; }).join('');
     document.getElementById('bottomnav').innerHTML = NAV.map(function (n) { return '<a href="' + n[0] + '" class="' + (on(n[0]) ? 'on' : '') + '"><span class="ic">' + n[2] + '</span>' + n[1] + '</a>'; }).join('');
@@ -105,12 +110,13 @@
     var h = location.hash || '#/';
     var p = h.split('?')[0].split('/'); // ['#','x',...]
     var q = {}; (h.split('?')[1] || '').split('&').forEach(function (kv) { if (kv) { var a = kv.split('='); q[a[0]] = decodeURIComponent(a[1] || ''); } });
+    if (!nvInfo()) return vNivel();
     drawNav(h);
     var v = p[1] || '';
     var fn = {
       '': vPainel, trilha: vTrilha, materia: function () { vMateria(p[2]); }, aula: function () { vAula(p[2], p[3]); },
       praticar: vPraticar, quiz: function () { vQuiz(q); }, simulados: vSimulados, simulado: vSimRun, erros: vErros,
-      revisao: vRevisao, cronograma: vCron, edital: vEdital, config: vConfig, mais: vMais
+      revisao: vRevisao, nivel: vNivel, cronograma: vCron, edital: vEdital, config: vConfig, mais: vMais
     }[v] || vPainel;
     fn();
     window.scrollTo(0, 0);
@@ -118,19 +124,47 @@
   window.addEventListener('hashchange', route);
   function go(h) { if (location.hash === h) route(); else location.hash = h; }
 
+  /* ---------- Confirmação do nível ao entrar no site ---------- */
+  var nivelConfirmado = false;
+  try { nivelConfirmado = sessionStorage.getItem('estudo.nvok') === '1'; } catch (e) { }
+  function confirmarNivel() {
+    var n = nvInfo();
+    if (!n || nivelConfirmado || (location.hash || '').indexOf('#/nivel') === 0) return;
+    var o = document.createElement('div'); o.className = 'modal';
+    var ntop = C.materias.reduce(function (a, m) { return a + topsOf(m).length; }, 0);
+    o.innerHTML = '<div class="box" role="dialog" aria-modal="true" aria-labelledby="nvt"><div class="small mut">Você está cadastrado(a) para estudar no nível:</div><h2 id="nvt" style="margin:.2rem 0">🎓 ' + esc(n.nome) + '</h2><p class="small">' + esc(n.desc) + '</p><p class="small mut">' + ntop + ' tópicos · ' + (C.dist[n.id].confirmada ? 'estrutura da prova confirmada no edital' : 'estrutura da prova estimada (confira no edital do seu cargo)') + '</p><p><b>Esse é o nível do concurso que você vai fazer?</b></p><div class="row"><button class="btn pri" id="nv-ok">Sim, é esse</button><button class="btn" id="nv-troca">Trocar nível</button></div></div>';
+    document.body.appendChild(o);
+    function fecha() { nivelConfirmado = true; try { sessionStorage.setItem('estudo.nvok', '1'); } catch (e) { } o.remove(); }
+    o.querySelector('#nv-ok').onclick = fecha;
+    o.querySelector('#nv-troca').onclick = function () { fecha(); go('#/nivel'); };
+    o.querySelector('#nv-ok').focus();
+  }
+
+  /* ---------- Escolha do nível ---------- */
+  function vNivel() {
+    document.getElementById('sidenav').innerHTML = ''; document.getElementById('bottomnav').innerHTML = '';
+    var atual = nvInfo();
+    var h = '<h1>' + (atual ? 'Trocar nível de escolaridade' : 'Qual é o seu nível de escolaridade?') + '</h1>' + (atual ? '<p class="small">Nível cadastrado hoje: <b>' + esc(atual.nome) + '</b>. <a href="#/">Manter e voltar</a></p>' : '') + '<p class="mut">O estudo (tópicos, questões, simulado e apostilas) é montado conforme o nível do cargo que você vai disputar. Você pode mudar depois em Ajustes.</p>';
+    C.niveis.forEach(function (n) {
+      h += '<button class="card" style="display:block;width:100%;text-align:left;cursor:pointer;color:var(--ink);font:inherit" data-n="' + n.id + '"><b>' + esc(n.nome) + '</b><div class="small mut">' + esc(n.desc) + '</div><div class="small" style="margin-top:.3rem"><span class="pill">' + C.materias.reduce(function (a, m) { return a + m.topicos.filter(function (t) { return t.nv.indexOf(n.id) >= 0; }).length; }, 0) + ' tópicos</span> ' + (C.dist[n.id].confirmada ? '<span class="pill ok">estrutura da prova confirmada</span>' : '<span class="pill warn">estrutura estimada</span>') + '</div></button>';
+    });
+    $app.innerHTML = h;
+    Array.prototype.forEach.call($app.querySelectorAll('[data-n]'), function (b) { b.onclick = function () { S.nivel = b.getAttribute('data-n'); nivelConfirmado = true; try { sessionStorage.setItem('estudo.nvok', '1'); } catch (e) { } save(); go('#/'); }; });
+  }
+
   /* ---------- Painel ---------- */
   var RITMO = { 1: ['portugues', 'Português'], 2: ['logica', 'Raciocínio Lógico'], 3: ['legislacao', 'Legislação'], 4: ['especificos', 'Conhecimentos Específicos'], 5: [null, 'Revisão e Conhecimentos Gerais'], 6: [null, 'Simulado'], 0: [null, 'Caderno de erros (dia leve)'] };
   function diasPara(dt) { return Math.ceil((new Date(dt) - new Date()) / 86400000); }
   function vPainel() {
     var v = voltaAtual(), wd = new Date().getDay(), r = RITMO[wd];
     var prox = null, volta = Math.max(v.n, 1);
-    C.materias.some(function (m) { return m.topicos.some(function (t) { if (!topicDone(m.id, t.id, volta) && (!r[0] || r[0] === m.id)) { prox = { m: m, t: t }; return true; } }); });
-    if (!prox) C.materias.some(function (m) { return m.topicos.some(function (t) { if (!topicDone(m.id, t.id, volta)) { prox = { m: m, t: t }; return true; } }); });
+    mats().some(function (m) { return topsOf(m).some(function (t) { if (!topicDone(m.id, t.id, volta) && (!r[0] || r[0] === m.id)) { prox = { m: m, t: t }; return true; } }); });
+    if (!prox) mats().some(function (m) { return topsOf(m).some(function (t) { if (!topicDone(m.id, t.id, volta)) { prox = { m: m, t: t }; return true; } }); });
     var due = revDue().filter(function (x) { return x.r.due <= today(); });
     var semIni = addDays(today(), -((new Date().getDay() + 6) % 7));
     var feitosSem = 0; Object.keys(S.done).forEach(function (k) { Object.keys(S.done[k]).forEach(function (vv) { if (iso(new Date(S.done[k][vv])) >= semIni) feitosSem++; }); });
     var geral = acc(function () { return true; });
-    var h = '<h1>Olá! Vamos estudar?</h1>';
+    var h = '<h1>Olá! Vamos estudar?</h1><p class="small mut" style="margin-top:-.3rem">Nível: <b>' + esc(nvInfo().nome) + '</b> · <a href="#/config">mudar</a></p>';
     h += '<div class="grid c2">' + C.provas.map(function (p) { var d = diasPara(p.data); return '<div class="card"><div class="mut small">Prova ' + esc(p.nome) + '</div><div class="stat">' + (d >= 0 ? d + ' dias' : 'Prova realizada') + '</div><div class="small mut">' + brDate(p.data.slice(0, 10)) + ' às ' + p.data.slice(11, 16).replace(':', 'h') + ' (confirmar no edital)</div></div>'; }).join('') + '</div>';
     h += '<div class="card"><div class="row"><b>' + esc(v.nome) + '</b><span class="sp"></span><span class="pill">' + esc(r[1]) + ' hoje</span></div>';
     h += '<p class="small mut" style="margin:.3rem 0">Rotina do dia: teoria dirigida 60 min · questões 90 min · revisão ativa 30 min (resumo de 1 página + caderno de erros).</p>';
@@ -140,8 +174,8 @@
     h += '<div class="card"><div class="mut small">Meta da semana (' + feitosSem + '/' + S.meta + ' etapas)</div>' + bar(Math.min(100, pct(feitosSem, S.meta))) + '<div class="small mut" style="margin-top:.4rem">Ajuste em Ajustes.</div></div>';
     h += '<div class="card"><div class="mut small">Acertos gerais</div><div class="stat">' + (geral.tries ? geral.p + '%' : '--') + '</div><div class="small mut">' + geral.hits + ' de ' + geral.tries + ' respostas</div></div></div>';
     h += '<h2>Progresso por matéria</h2>';
-    C.materias.forEach(function (m) {
-      var tot = m.topicos.length, a = acc(function (q) { return q.m === m.id; });
+    mats().forEach(function (m) {
+      var tot = topsOf(m).length, a = acc(function (q) { return q.m === m.id; });
       h += '<a class="card" style="display:block;color:inherit;text-decoration:none" href="#/materia/' + m.id + '"><div class="row"><b>' + esc(m.nome) + '</b><span class="sp"></span><span class="small mut">' + (a.tries ? 'acertos ' + a.p + '%' : 'sem questões feitas') + '</span></div>' + bar(pct(matProgress(m.id, 1), tot), m.cor) +
         '<div class="small mut" style="margin-top:.3rem">Volta 1: ' + matProgress(m.id, 1) + '/' + tot + ' · Volta 2: ' + matProgress(m.id, 2) + '/' + tot + ' · Volta 3: ' + matProgress(m.id, 3) + '/' + tot + '</div></a>';
     });
@@ -152,16 +186,16 @@
   /* ---------- Trilha ---------- */
   function vTrilha() {
     var h = '<h1>Trilha de estudo</h1><p class="mut">Três voltas na matéria inteira: <b>contexto → básico → aprofundado</b>. Em cada tópico: contexto (10 min), resumo (30 min), teste (20 min).</p>';
-    C.materias.forEach(function (m) {
-      h += '<a class="card" style="display:block;color:inherit;text-decoration:none;border-left:6px solid ' + m.cor + '" href="#/materia/' + m.id + '"><div class="row"><b>' + esc(m.nome) + '</b><span class="sp"></span><span class="pill">' + m.questoes + ' questões · ' + m.peso + '</span></div><div class="small mut">' + m.topicos.length + ' tópicos · ' + qsOf(m.id).length + ' questões no banco</div></a>';
+    mats().forEach(function (m) {
+      h += '<a class="card" style="display:block;color:inherit;text-decoration:none;border-left:6px solid ' + m.cor + '" href="#/materia/' + m.id + '"><div class="row"><b>' + esc(m.nome) + '</b><span class="sp"></span><span class="pill">' + m.questoes + ' questões · ' + m.peso + '</span></div><div class="small mut">' + topsOf(m).length + ' tópicos · ' + qsOf(m.id).length + ' questões no banco</div></a>';
     });
     $app.innerHTML = h;
   }
   function vMateria(id) {
     var m = mat(id); if (!m) return go('#/trilha');
     var h = '<p><a href="#/trilha">← Trilha</a></p><h1>' + esc(m.nome) + '</h1><p class="mut">' + esc(m.banca) + '</p>';
-    h += '<div class="row noprint" style="margin-bottom:.6rem"><a class="btn sm" href="pdf/apostila-' + m.id + '.pdf" target="_blank" rel="noopener">⬇ Apostila em PDF</a><a class="btn sm" href="#/quiz?m=' + m.id + '&n=10">✏️ Praticar 10 questões</a></div><div class="card list">';
-    m.topicos.forEach(function (t) {
+    h += '<div class="row noprint" style="margin-bottom:.6rem"><a class="btn sm" href="pdf/apostila-' + S.nivel + '-' + m.id + '.pdf" target="_blank" rel="noopener">⬇ Apostila em PDF</a><a class="btn sm" href="#/quiz?m=' + m.id + '&n=10">✏️ Praticar 10 questões</a></div><div class="card list">';
+    topsOf(m).forEach(function (t) {
       var d = [1, 2, 3].map(function (v) { return topicDone(m.id, t.id, v) ? '●' : '○'; }).join(' ');
       h += '<a class="item" href="#/aula/' + m.id + '/' + t.id + '"><span class="dot" style="background:' + m.cor + '"></span><span style="flex:1"><b>' + esc(t.titulo) + '</b><br><span class="small mut">' + qsOf(m.id, t.id).length + ' questões' + (t.provavel ? ' · provável' : '') + '</span></span><span title="Voltas 1, 2 e 3" class="small mut">' + d + '</span></a>';
     });
@@ -174,7 +208,7 @@
   function gUrl2(q) { return 'https://www.google.com/search?q=' + encodeURIComponent(q); }
   function vAula(mid, tid) {
     var m = mat(mid), t = topico(mid, tid); if (!t) return go('#/trilha');
-    var k = tkey(mid, tid), idx = m.topicos.indexOf(t), nxt = m.topicos[idx + 1], prv = m.topicos[idx - 1];
+    var k = tkey(mid, tid), tl = topsOf(m), idx = tl.indexOf(t), nxt = tl[idx + 1], prv = tl[idx - 1];
     var links = S.links[k] || [];
     var h = '<p class="noprint"><a href="#/materia/' + mid + '">← ' + esc(m.nome) + '</a></p><div class="lesson"><h1>' + esc(t.titulo) + '</h1>';
     h += '<div class="row noprint">' + (t.provavel ? '<span class="pill warn">conteúdo provável · confirmar no edital</span>' : '') + '</div>';
@@ -184,7 +218,7 @@
       '<a class="btn sm" target="_blank" rel="noopener" href="' + ytUrl(t.busca) + '">▶ Videoaulas no YouTube</a>' +
       '<a class="btn sm" target="_blank" rel="noopener" href="' + gUrl(t.busca) + '">📄 PDFs resumidos (Google)</a>' +
       '<a class="btn sm" target="_blank" rel="noopener" href="' + gUrl2(t.titulo + ' concurso') + '">🔎 Google</a>' +
-      '<a class="btn sm" target="_blank" rel="noopener" href="pdf/apostila-' + mid + '.pdf">⬇ Apostila PDF (' + esc(m.nome) + ')</a>' +
+      '<a class="btn sm" target="_blank" rel="noopener" href="pdf/apostila-' + S.nivel + '-' + mid + '.pdf">⬇ Apostila PDF (' + esc(m.nome) + ')</a>' +
       '<button class="btn sm" id="b-print">🖨 Salvar esta aula em PDF</button></div>';
     h += '<div id="mylinks" style="margin-top:.6rem">' + links.map(function (l, i) { return '<div class="row small"><a target="_blank" rel="noopener" href="' + esc(l.url) + '">' + esc(l.t) + '</a><button class="btn sm" data-del="' + i + '" aria-label="Remover">✕</button></div>'; }).join('') + '</div>' +
       '<details style="margin-top:.5rem"><summary class="small">+ Adicionar meu link (vídeo ou PDF)</summary><label for="lk-t">Título</label><input type="text" id="lk-t" placeholder="Ex.: Aula de crase do canal X"><label for="lk-u">Endereço (https://...)</label><input type="url" id="lk-u" placeholder="https://"><p><button class="btn sm pri" id="lk-add">Salvar link</button></p></details></div>';
@@ -210,14 +244,14 @@
 
   /* ---------- Quiz com correção imediata ---------- */
   function vPraticar() {
-    var h = '<h1>Questões</h1><div class="card"><label for="pm">Matéria</label><select id="pm"><option value="">Todas</option>' + C.materias.map(function (m) { return '<option value="' + m.id + '">' + esc(m.nome) + '</option>'; }).join('') + '</select>' +
+    var h = '<h1>Questões</h1><div class="card"><label for="pm">Matéria</label><select id="pm"><option value="">Todas</option>' + mats().map(function (m) { return '<option value="' + m.id + '">' + esc(m.nome) + '</option>'; }).join('') + '</select>' +
       '<label for="pt">Tópico</label><select id="pt"><option value="">Todos</option></select>' +
       '<label for="pn">Quantidade</label><select id="pn"><option>5</option><option selected>10</option><option>20</option><option value="999">Todas</option></select>' +
       '<label for="pf">Filtro</label><select id="pf"><option value="">Todas</option><option value="novas">Só as que ainda não fiz</option><option value="erradas">Só as que errei</option></select>' +
       '<p><button class="btn pri" id="pgo">Começar</button></p></div>';
     $app.innerHTML = h;
     var pm = document.getElementById('pm'), pt = document.getElementById('pt');
-    pm.onchange = function () { var m = mat(pm.value); pt.innerHTML = '<option value="">Todos</option>' + (m ? m.topicos.map(function (t) { return '<option value="' + t.id + '">' + esc(t.titulo) + '</option>'; }).join('') : ''); };
+    pm.onchange = function () { var m = mat(pm.value); pt.innerHTML = '<option value="">Todos</option>' + (m ? topsOf(m).map(function (t) { return '<option value="' + t.id + '">' + esc(t.titulo) + '</option>'; }).join('') : ''); };
     document.getElementById('pgo').onclick = function () { go('#/quiz?m=' + pm.value + '&t=' + pt.value + '&n=' + document.getElementById('pn').value + '&f=' + document.getElementById('pf').value); };
   }
   function vQuiz(q) {
@@ -266,24 +300,27 @@
     var cur = loadSim();
     var h = '<h1>Simulados</h1>';
     if (cur) h += '<div class="card"><b>Você tem um simulado em andamento.</b><p><a class="btn pri" href="#/simulado">Continuar</a> <button class="btn" id="sim-drop">Descartar</button></p></div>';
-    h += '<div class="card"><h3 style="margin-top:0">Simulado SEMED - Agente de Secretaria Escolar</h3><p>50 questões · 3 horas · mesma distribuição da prova (Português 10, Raciocínio Lógico 10, Legislação 10, Específicos 15, Gerais 5). Ideal fazer às <b>9h15</b> de sábado, no horário real.</p>' +
-      '<p class="small mut">O banco atual tem ' + C.questoes.length + ' questões; cada simulado sorteia dentre elas, então questões se repetem entre simulados.</p><button class="btn pri" id="sim-full">Iniciar simulado completo</button></div>';
-    h += '<div class="card"><h3 style="margin-top:0">Mini-simulado</h3><p>20 questões · 70 minutos · proporcional à prova.</p><button class="btn" id="sim-mini">Iniciar mini-simulado</button></div>';
+    var D = C.dist[S.nivel], dq = D.q, tot = Object.keys(dq).reduce(function (a, k) { return a + dq[k]; }, 0), mins = Math.round(tot * 3.6);
+    var dtxt = mats().map(function (m) { return m.nome.replace('Conhecimentos ', '').replace(' (RO e Porto Velho)', '') + ' ' + dq[m.id]; }).join(', ');
+    h += '<div class="card"><h3 style="margin-top:0">Simulado ' + esc(nvInfo().nome) + '</h3><p>' + tot + ' questões · ' + Math.floor(mins / 60) + ' h ' + pad(mins % 60) + ' min · distribuição: ' + esc(dtxt) + '.' + (S.nivel === 'medio' ? ' Ideal fazer às <b>9h15</b> de sábado, no horário real.' : '') + '</p>' +
+      (D.confirmada ? '' : '<p class="aviso">Estrutura <b>estimada</b>: não li o edital deste nível. Confira quantidade e distribuição reais no edital do seu cargo.</p>') +
+      '<p class="small mut">Se o banco tiver menos questões que o necessário em uma matéria, o simulado usa as disponíveis. O banco tem ' + qsOf().length + ' questões neste nível; cada simulado sorteia dentre elas, então elas se repetem.</p><button class="btn pri" id="sim-full">Iniciar simulado completo</button></div>';
+    h += '<div class="card"><h3 style="margin-top:0">Mini-simulado</h3><p>cerca de ' + Math.round(tot * 0.4) + ' questões · ' + Math.round(mins * 0.4) + ' minutos · proporcional.</p><button class="btn" id="sim-mini">Iniciar mini-simulado</button></div>';
     if (S.sims.length) {
       h += '<h2>Histórico</h2><div class="card"><table><tr><th>Data</th><th>Questões</th><th>Acertos</th><th>Tempo</th></tr>' + S.sims.slice().reverse().map(function (s) { return '<tr><td>' + brDate(s.dia) + '</td><td>' + s.total + '</td><td>' + s.acertos + ' (' + pct(s.acertos, s.total) + '%)</td><td>' + Math.round(s.gasto / 60) + ' min</td></tr>'; }).join('') + '</table></div>';
     }
     $app.innerHTML = h;
     function start(factor, dur) {
       var ids = [];
-      Object.keys(C.distribuicao).forEach(function (m) {
-        var n = Math.round(C.distribuicao[m] * factor);
+      Object.keys(dq).forEach(function (m) {
+        var n = Math.round(dq[m] * factor);
         ids = ids.concat(shuffle(qsOf(m)).slice(0, n).map(function (x) { return x.id; }));
       });
       saveSim({ ids: ids, resp: {}, marc: {}, i: 0, ini: Date.now(), dur: dur, fim: null });
       go('#/simulado');
     }
-    document.getElementById('sim-full').onclick = function () { start(1, 180 * 60); };
-    document.getElementById('sim-mini').onclick = function () { start(0.4, 70 * 60); };
+    document.getElementById('sim-full').onclick = function () { start(1, mins * 60); };
+    document.getElementById('sim-mini').onclick = function () { start(0.4, Math.round(mins * 0.4) * 60); };
     var d = document.getElementById('sim-drop'); if (d) d.onclick = function () { ask('Descartar o simulado em andamento?', function () { saveSim(null); vSimulados(); }); };
   }
   function fmt(sec) { sec = Math.max(0, sec); var h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = sec % 60; return pad(h) + ':' + pad(m) + ':' + pad(s); }
@@ -406,6 +443,7 @@
   /* ---------- Edital ---------- */
   function vEdital() {
     $app.innerHTML = '<h1>Edital e regras da prova</h1>' +
+      (S.nivel !== 'medio' ? '<div class="aviso">Esta tela resume o cargo de <b>nível médio</b> da SEMED. Para o seu nível (' + esc(nvInfo().nome) + '), consulte o Anexo I (cargos) e o Anexo IV (conteúdos) do edital: <b>A CONFIRMAR NO EDITAL</b>.</div>' : '') +
       '<div class="aviso">Informações do corpo do <b>Edital SEMED nº 24/2026</b> (lido em 10/10/2026) e de reportagens de 3º. O <b>Anexo IV (conteúdos) não consta nesse PDF</b>: baixe-o no site da banca e compare com a trilha. <b>Nada aqui substitui o edital oficial.</b></div>' +
       '<div class="card"><h3 style="margin-top:0">Links oficiais</h3><div class="res"><a target="_blank" rel="noopener" href="https://www.ibgpconcursos.com.br">Site da banca IBGP (inscrição, anexos, avisos)</a><a target="_blank" rel="noopener" href="https://dhg1h5j42swfq.cloudfront.net/2026/09/29180921/00-edital-concurso-porto-velho_semed_final.pdf">PDF do edital SEMED nº 24/2026 (corpo, sem anexos)</a></div></div>' +
       '<div class="card"><h3 style="margin-top:0">SEMED · Agente de Secretaria Escolar (nível médio)</h3><table>' +
@@ -425,10 +463,11 @@
     $app.innerHTML = '<h1>Mais</h1><div class="card list">' + [['#/erros', '📓 Caderno de erros'], ['#/revisao', '🔁 Revisão espaçada'], ['#/cronograma', '📅 Cronograma'], ['#/edital', '📄 Edital e regras da prova'], ['#/config', '⚙️ Ajustes e backup']].map(function (x) { return '<a class="item" href="' + x[0] + '">' + x[1] + '</a>'; }).join('') + '</div>';
   }
   function vConfig() {
-    $app.innerHTML = '<h1>Ajustes</h1><div class="card"><label for="meta">Meta semanal (etapas concluídas por semana)</label><input type="number" id="meta" min="1" max="40" value="' + S.meta + '"></div>' +
+    $app.innerHTML = '<h1>Ajustes</h1><div class="card"><label for="nv">Nível de escolaridade</label><select id="nv">' + C.niveis.map(function (n) { return '<option value="' + n.id + '"' + (n.id === S.nivel ? ' selected' : '') + '>' + esc(n.nome) + '</option>'; }).join('') + '</select><p class="small mut">Muda os tópicos, questões, simulado e apostilas. Seu progresso é mantido.</p></div><div class="card"><label for="meta">Meta semanal (etapas concluídas por semana)</label><input type="number" id="meta" min="1" max="40" value="' + S.meta + '"></div>' +
       '<div class="card"><h3 style="margin-top:0">Backup do progresso</h3><p class="small mut">Seu progresso fica salvo neste aparelho. Para levar a outro (celular ↔ PC), exporte e importe o arquivo.</p><div class="row"><button class="btn" id="exp">⬇ Exportar</button><label class="btn" for="imp" style="margin:0">⬆ Importar</label><input type="file" id="imp" accept=".json,application/json" hidden></div></div>' +
-      '<div class="card"><h3 style="margin-top:0">Apostilas em PDF</h3><div class="res">' + C.materias.map(function (m) { return '<a target="_blank" rel="noopener" href="pdf/apostila-' + m.id + '.pdf">' + esc(m.nome) + '</a>'; }).join('') + '<a target="_blank" rel="noopener" href="pdf/apostila-completa.pdf"><b>Apostila completa (todas as matérias)</b></a></div></div>' +
+      '<div class="card"><h3 style="margin-top:0">Apostilas em PDF</h3><div class="res">' + mats().map(function (m) { return '<a target="_blank" rel="noopener" href="pdf/apostila-' + S.nivel + '-' + m.id + '.pdf">' + esc(m.nome) + '</a>'; }).join('') + '<a target="_blank" rel="noopener" href="pdf/apostila-' + S.nivel + '-completa.pdf"><b>Apostila completa (' + esc(nvInfo().nome) + ')</b></a></div></div>' +
       '<div class="card"><h3 style="margin-top:0">Zerar tudo</h3><button class="btn" id="rst" style="color:var(--bad)">Apagar progresso deste aparelho</button></div>';
+    document.getElementById('nv').onchange = function (e) { S.nivel = e.target.value; save(); toast('Nível: ' + nvInfo().nome); vConfig(); };
     document.getElementById('meta').onchange = function (e) { S.meta = Math.max(1, +e.target.value || 5); save(); toast('Meta salva'); };
     document.getElementById('exp').onclick = function () {
       var b = new Blob([JSON.stringify(S)], { type: 'application/json' }), a = document.createElement('a');
@@ -445,4 +484,5 @@
   /* ---------- Início ---------- */
   if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) navigator.serviceWorker.register('sw.js').catch(function () { });
   route();
+  confirmarNivel();
 })();
