@@ -7,8 +7,13 @@ Sistema de estudo em HTML/JS puro (sem instalar nada) para o concurso da **SEMED
 - **No celular:** publique a pasta (GitHub Pages, Netlify, etc.) e abra o endereço; use "Adicionar à tela inicial". Depois da primeira visita funciona offline (service worker; exige `https` ou `localhost`).
 - O progresso fica salvo no próprio aparelho. Para levar ao outro aparelho: *Mais → Ajustes → Exportar / Importar*.
 
-## Nível de escolaridade
-Na primeira visita o site pergunta o nível (**fundamental, médio ou superior**) e monta tudo conforme a escolha: tópicos, questões, simulado e apostilas em PDF. Dá para trocar em *Ajustes* sem perder o progresso.
+## Cadastro: concurso e nível
+Antes de entrar, a pessoa se **cadastra**: nome, o(s) **concurso(s)** em que se inscreveu (**SEMED, SEMUSA, IPAM ou SESAU-RO**) e, dentro de cada um, o **nível que pagou** (fundamental, médio e/ou superior, conforme os níveis de cada concurso). Cada par concurso + nível é uma inscrição; quem tem mais de uma escolhe qual estudar ao entrar e alterna pelo concurso no topo da tela. Banca, data da prova e estrutura mudam conforme a inscrição ativa. Tópicos, questões, simulado e apostilas seguem o nível. O cadastro (em *Ajustes → Meu cadastro*) pode ser editado sem perder o progresso.
+
+> O cadastro fica salvo só no aparelho (não há servidor nem login real) e o site não confere inscrição nem pagamento: vale o que a pessoa informar.
+> Só o edital da SEMED foi lido (nível médio = estrutura confirmada). SEMUSA tem datas do levantamento de 10/10/2026; IPAM e SESAU-RO ainda não tinham edital: aparecem como "data a definir" e estrutura estimada.
+
+Níveis:
 - **Médio:** completo, com a estrutura da prova da SEMED (edital 24/2026): 27 tópicos.
 - **Fundamental:** 17 tópicos básicos (sem secretaria escolar, LDB, redação oficial etc.). Estrutura da prova **estimada**.
 - **Superior:** base do médio + redação discursiva + orientação para os Específicos do cargo (29 tópicos). Estrutura **estimada**; os Específicos dependem do Anexo IV do seu cargo.
