@@ -6,7 +6,7 @@
   var $app = document.getElementById('app');
 
   /* ---------- Estado ---------- */
-  function defaults() { return { done: {}, answers: {}, erros: {}, rev: {}, notas: {}, links: {}, sims: [], cron: {}, meta: 5, tema: '', nivel: '' }; }
+  function defaults() { return { done: {}, answers: {}, erros: {}, rev: {}, notas: {}, links: {}, sims: [], cron: {}, meta: 5, tema: '', nivel: '', perfil: null }; }
   var S = (function () { try { return Object.assign(defaults(), JSON.parse(localStorage.getItem(LS) || '{}')); } catch (e) { return defaults(); } })();
   function save() { try { localStorage.setItem(LS, JSON.stringify(S)); } catch (e) { /* sem armazenamento: segue em memória */ } }
   function loadSim() { try { return JSON.parse(localStorage.getItem(LSSIM) || 'null'); } catch (e) { return null; } }
@@ -110,13 +110,14 @@
     var h = location.hash || '#/';
     var p = h.split('?')[0].split('/'); // ['#','x',...]
     var q = {}; (h.split('?')[1] || '').split('&').forEach(function (kv) { if (kv) { var a = kv.split('='); q[a[0]] = decodeURIComponent(a[1] || ''); } });
-    if (!nvInfo()) return vNivel();
+    if (!S.perfil) { drawNav(h); return vCadastro(); }
+    if (niveisReg().indexOf(S.nivel) < 0) { S.nivel = niveisReg()[0]; save(); }
     drawNav(h);
     var v = p[1] || '';
     var fn = {
       '': vPainel, trilha: vTrilha, materia: function () { vMateria(p[2]); }, aula: function () { vAula(p[2], p[3]); },
       praticar: vPraticar, quiz: function () { vQuiz(q); }, simulados: vSimulados, simulado: vSimRun, erros: vErros,
-      revisao: vRevisao, nivel: vNivel, cronograma: vCron, edital: vEdital, config: vConfig, mais: vMais
+      revisao: vRevisao, nivel: vNivel, cadastro: vCadastro, cronograma: vCron, edital: vEdital, config: vConfig, mais: vMais
     }[v] || vPainel;
     fn();
     window.scrollTo(0, 0);
@@ -124,32 +125,80 @@
   window.addEventListener('hashchange', route);
   function go(h) { if (location.hash === h) route(); else location.hash = h; }
 
-  /* ---------- Confirmação do nível ao entrar no site ---------- */
+  /* ---------- Cadastro e níveis ---------- */
+  function niveisReg() { return (S.perfil && S.perfil.niveis) || []; }
+  function nomeNivel(id) { var n = C.niveis.filter(function (x) { return x.id === id; })[0]; return n ? n.nome : id; }
+  function primeiroNome() { return S.perfil ? String(S.perfil.nome).split(' ')[0] : ''; }
+  function marcaSessao() { nivelConfirmado = true; try { sessionStorage.setItem('estudo.nvok', '1'); } catch (e) { } }
+
   var nivelConfirmado = false;
   try { nivelConfirmado = sessionStorage.getItem('estudo.nvok') === '1'; } catch (e) { }
   function confirmarNivel() {
-    var n = nvInfo();
-    if (!n || nivelConfirmado || (location.hash || '').indexOf('#/nivel') === 0) return;
+    var n = nvInfo(), reg = niveisReg(), hh = (location.hash || '');
+    if (!S.perfil || !n || nivelConfirmado || hh.indexOf('#/nivel') === 0 || hh.indexOf('#/cadastro') === 0) return;
     var o = document.createElement('div'); o.className = 'modal';
     var ntop = C.materias.reduce(function (a, m) { return a + topsOf(m).length; }, 0);
-    o.innerHTML = '<div class="box" role="dialog" aria-modal="true" aria-labelledby="nvt"><div class="small mut">Você está cadastrado(a) para estudar no nível:</div><h2 id="nvt" style="margin:.2rem 0">🎓 ' + esc(n.nome) + '</h2><p class="small">' + esc(n.desc) + '</p><p class="small mut">' + ntop + ' tópicos · ' + (C.dist[n.id].confirmada ? 'estrutura da prova confirmada no edital' : 'estrutura da prova estimada (confira no edital do seu cargo)') + '</p><p><b>Esse é o nível do concurso que você vai fazer?</b></p><div class="row"><button class="btn pri" id="nv-ok">Sim, é esse</button><button class="btn" id="nv-troca">Trocar nível</button></div></div>';
+    var corpo;
+    if (reg.length > 1) {
+      corpo = '<div class="small mut">Olá, ' + esc(primeiroNome()) + '! Você se cadastrou em ' + reg.length + ' níveis. <b>Qual vai estudar agora?</b></div>' +
+        '<div style="display:grid;gap:.5rem;margin:.7rem 0">' + reg.map(function (id) { return '<button class="btn ' + (id === S.nivel ? 'pri' : '') + '" data-pick="' + id + '">🎓 ' + esc(nomeNivel(id)) + '</button>'; }).join('') + '</div>' +
+        '<p class="small mut">Você pode alternar entre eles a qualquer momento, tocando no nível no topo da tela.</p><div class="row"><button class="btn sm" id="nv-troca">Editar cadastro</button></div>';
+    } else {
+      corpo = '<div class="small mut">Olá, ' + esc(primeiroNome()) + '! Você está cadastrado(a) no nível:</div><h2 id="nvt" style="margin:.2rem 0">🎓 ' + esc(n.nome) + '</h2><p class="small">' + esc(n.desc) + '</p><p class="small mut">' + ntop + ' tópicos · ' + (C.dist[n.id].confirmada ? 'estrutura da prova confirmada no edital' : 'estrutura da prova estimada (confira no edital do seu cargo)') + '</p><p><b>É esse o nível da prova que você pagou?</b></p><div class="row"><button class="btn pri" id="nv-ok">Sim, é esse</button><button class="btn" id="nv-troca">Editar cadastro</button></div>';
+    }
+    o.innerHTML = '<div class="box" role="dialog" aria-modal="true">' + corpo + '</div>';
     document.body.appendChild(o);
-    function fecha() { nivelConfirmado = true; try { sessionStorage.setItem('estudo.nvok', '1'); } catch (e) { } o.remove(); }
-    o.querySelector('#nv-ok').onclick = fecha;
-    o.querySelector('#nv-troca').onclick = function () { fecha(); go('#/nivel'); };
-    o.querySelector('#nv-ok').focus();
+    function fecha() { marcaSessao(); o.remove(); }
+    var ok = o.querySelector('#nv-ok'); if (ok) { ok.onclick = fecha; ok.focus(); }
+    o.querySelector('#nv-troca').onclick = function () { fecha(); go('#/cadastro'); };
+    Array.prototype.forEach.call(o.querySelectorAll('[data-pick]'), function (b) { b.onclick = function () { S.nivel = b.getAttribute('data-pick'); save(); fecha(); route(); }; });
   }
 
-  /* ---------- Escolha do nível ---------- */
-  function vNivel() {
-    document.getElementById('sidenav').innerHTML = ''; document.getElementById('bottomnav').innerHTML = '';
-    var atual = nvInfo();
-    var h = '<h1>' + (atual ? 'Trocar nível de escolaridade' : 'Qual é o seu nível de escolaridade?') + '</h1>' + (atual ? '<p class="small">Nível cadastrado hoje: <b>' + esc(atual.nome) + '</b>. <a href="#/">Manter e voltar</a></p>' : '') + '<p class="mut">O estudo (tópicos, questões, simulado e apostilas) é montado conforme o nível do cargo que você vai disputar. Você pode mudar depois em Ajustes.</p>';
-    C.niveis.forEach(function (n) {
-      h += '<button class="card" style="display:block;width:100%;text-align:left;cursor:pointer;color:var(--ink);font:inherit" data-n="' + n.id + '"><b>' + esc(n.nome) + '</b><div class="small mut">' + esc(n.desc) + '</div><div class="small" style="margin-top:.3rem"><span class="pill">' + C.materias.reduce(function (a, m) { return a + m.topicos.filter(function (t) { return t.nv.indexOf(n.id) >= 0; }).length; }, 0) + ' tópicos</span> ' + (C.dist[n.id].confirmada ? '<span class="pill ok">estrutura da prova confirmada</span>' : '<span class="pill warn">estrutura estimada</span>') + '</div></button>';
-    });
+  /* Cadastro: nome + níveis para os quais a pessoa pagou a inscrição (1 a 3) */
+  function vCadastro() {
+    var edit = !!S.perfil;
+    if (!edit) { document.getElementById('sidenav').innerHTML = ''; document.getElementById('bottomnav').innerHTML = ''; }
+    var marcados = edit ? niveisReg() : (S.nivel ? [S.nivel] : []);
+    var nome = edit ? S.perfil.nome : '';
+    var h = '<h1>' + (edit ? 'Meu cadastro' : 'Cadastre-se para entrar') + '</h1>' +
+      '<p class="mut">' + (edit ? 'Atualize seu nome ou os níveis da sua inscrição.' : 'Informe seu nome e o(s) nível(is) da prova para o(s) qual(is) você pagou a inscrição. O estudo é montado conforme o nível.') + '</p>' +
+      '<form id="cad" class="card" novalidate><label for="cd-nome">Seu nome</label><input type="text" id="cd-nome" maxlength="60" autocomplete="name" placeholder="Ex.: Maria Silva" value="' + esc(nome) + '">' +
+      '<fieldset style="border:0;padding:0;margin:.8rem 0 0"><legend style="font-weight:600;margin-bottom:.3rem">Para qual(is) nível(is) você pagou a inscrição?</legend><p class="small mut" style="margin:0 0 .4rem">Marque 1, 2 ou 3 opções. Se pagou mais de um nível, você poderá alternar entre eles.</p>' +
+      C.niveis.map(function (n) {
+        return '<label class="chk" style="font-weight:400;border:1px solid var(--line);border-radius:12px;padding:.6rem .7rem;margin:.4rem 0"><input type="checkbox" name="nv" value="' + n.id + '"' + (marcados.indexOf(n.id) >= 0 ? ' checked' : '') + '><span><b>' + esc(n.nome) + '</b><br><span class="small mut">' + esc(n.desc) + '</span><br><span class="small ' + (C.dist[n.id].confirmada ? '' : 'mut') + '">' + (C.dist[n.id].confirmada ? '✔ estrutura da prova confirmada no edital' : 'estrutura da prova estimada') + '</span></span></label>';
+      }).join('') + '</fieldset><div id="cd-err" class="small" role="alert" style="color:var(--bad);min-height:1.2em;margin:.4rem 0"></div>' +
+      '<div class="row"><button type="submit" class="btn pri">' + (edit ? 'Salvar cadastro' : 'Entrar no site') + '</button>' + (edit ? '<a class="btn" href="#/">Cancelar</a>' : '') + '</div>' +
+      '<p class="small mut" style="margin-top:.8rem">🔒 O cadastro fica salvo só neste aparelho; nada é enviado a servidor. O site não confere o pagamento: vale o que você informar.</p></form>';
     $app.innerHTML = h;
-    Array.prototype.forEach.call($app.querySelectorAll('[data-n]'), function (b) { b.onclick = function () { S.nivel = b.getAttribute('data-n'); nivelConfirmado = true; try { sessionStorage.setItem('estudo.nvok', '1'); } catch (e) { } save(); go('#/'); }; });
+    document.getElementById('cad').onsubmit = function (e) {
+      e.preventDefault();
+      var nm = document.getElementById('cd-nome').value.replace(/\s+/g, ' ').trim();
+      var ns = Array.prototype.map.call($app.querySelectorAll('input[name=nv]:checked'), function (c) { return c.value; });
+      var err = document.getElementById('cd-err');
+      if (nm.length < 2) { err.textContent = 'Digite seu nome.'; document.getElementById('cd-nome').focus(); return; }
+      if (!ns.length) { err.textContent = 'Marque pelo menos um nível.'; return; }
+      var novo = !S.perfil;
+      S.perfil = { nome: nm, niveis: ns, criado: (S.perfil && S.perfil.criado) || Date.now() };
+      if (ns.indexOf(S.nivel) < 0) S.nivel = ns[0];
+      save();
+      if (ns.length > 1 && novo) nivelConfirmado = false; else marcaSessao();
+      go('#/');
+      if (!nivelConfirmado) confirmarNivel();
+      else toast('Cadastro salvo');
+    };
+  }
+
+  /* Trocar o nível ativo entre os níveis cadastrados */
+  function vNivel() {
+    var atual = nvInfo(), reg = niveisReg();
+    var h = '<h1>Trocar de nível</h1><p class="small">Nível atual: <b>' + esc(atual.nome) + '</b>. <a href="#/">Manter e voltar</a></p><p class="mut">' + (reg.length > 1 ? 'Você se cadastrou em ' + reg.length + ' níveis. Escolha qual estudar agora; seu progresso nos tópicos em comum é mantido.' : 'Você se cadastrou em um nível. Para estudar outro, adicione-o ao seu cadastro.') + '</p>';
+    reg.forEach(function (id) {
+      var n = C.niveis.filter(function (x) { return x.id === id; })[0];
+      h += '<button class="card" style="display:block;width:100%;text-align:left;cursor:pointer;color:var(--ink);font:inherit;' + (id === S.nivel ? 'border:2px solid var(--pri)' : '') + '" data-n="' + n.id + '"><b>' + esc(n.nome) + (id === S.nivel ? ' · atual' : '') + '</b><div class="small mut">' + esc(n.desc) + '</div><div class="small" style="margin-top:.3rem"><span class="pill">' + C.materias.reduce(function (a, m) { return a + m.topicos.filter(function (t) { return t.nv.indexOf(n.id) >= 0; }).length; }, 0) + ' tópicos</span> ' + (C.dist[n.id].confirmada ? '<span class="pill ok">estrutura da prova confirmada</span>' : '<span class="pill warn">estrutura estimada</span>') + '</div></button>';
+    });
+    h += '<p><a class="btn" href="#/cadastro">✎ Editar cadastro / adicionar nível</a></p>';
+    $app.innerHTML = h;
+    Array.prototype.forEach.call($app.querySelectorAll('[data-n]'), function (b) { b.onclick = function () { S.nivel = b.getAttribute('data-n'); marcaSessao(); save(); go('#/'); }; });
   }
 
   /* ---------- Painel ---------- */
@@ -164,7 +213,7 @@
     var semIni = addDays(today(), -((new Date().getDay() + 6) % 7));
     var feitosSem = 0; Object.keys(S.done).forEach(function (k) { Object.keys(S.done[k]).forEach(function (vv) { if (iso(new Date(S.done[k][vv])) >= semIni) feitosSem++; }); });
     var geral = acc(function () { return true; });
-    var h = '<h1>Olá! Vamos estudar?</h1><p class="small mut" style="margin-top:-.3rem">Nível: <b>' + esc(nvInfo().nome) + '</b> · <a href="#/config">mudar</a></p>';
+    var h = '<h1>Olá, ' + esc(primeiroNome()) + '! Vamos estudar?</h1><p class="small mut" style="margin-top:-.3rem">Nível: <b>' + esc(nvInfo().nome) + '</b> · <a href="#/' + (niveisReg().length > 1 ? 'nivel' : 'cadastro') + '">' + (niveisReg().length > 1 ? 'alternar nível' : 'editar cadastro') + '</a></p>';
     h += '<div class="grid c2">' + C.provas.map(function (p) { var d = diasPara(p.data); return '<div class="card"><div class="mut small">Prova ' + esc(p.nome) + '</div><div class="stat">' + (d >= 0 ? d + ' dias' : 'Prova realizada') + '</div><div class="small mut">' + brDate(p.data.slice(0, 10)) + ' às ' + p.data.slice(11, 16).replace(':', 'h') + ' (confirmar no edital)</div></div>'; }).join('') + '</div>';
     h += '<div class="card"><div class="row"><b>' + esc(v.nome) + '</b><span class="sp"></span><span class="pill">' + esc(r[1]) + ' hoje</span></div>';
     h += '<p class="small mut" style="margin:.3rem 0">Rotina do dia: teoria dirigida 60 min · questões 90 min · revisão ativa 30 min (resumo de 1 página + caderno de erros).</p>';
@@ -463,7 +512,7 @@
     $app.innerHTML = '<h1>Mais</h1><div class="card list">' + [['#/erros', '📓 Caderno de erros'], ['#/revisao', '🔁 Revisão espaçada'], ['#/cronograma', '📅 Cronograma'], ['#/edital', '📄 Edital e regras da prova'], ['#/config', '⚙️ Ajustes e backup']].map(function (x) { return '<a class="item" href="' + x[0] + '">' + x[1] + '</a>'; }).join('') + '</div>';
   }
   function vConfig() {
-    $app.innerHTML = '<h1>Ajustes</h1><div class="card"><label for="nv">Nível de escolaridade</label><select id="nv">' + C.niveis.map(function (n) { return '<option value="' + n.id + '"' + (n.id === S.nivel ? ' selected' : '') + '>' + esc(n.nome) + '</option>'; }).join('') + '</select><p class="small mut">Muda os tópicos, questões, simulado e apostilas. Seu progresso é mantido.</p></div><div class="card"><label for="meta">Meta semanal (etapas concluídas por semana)</label><input type="number" id="meta" min="1" max="40" value="' + S.meta + '"></div>' +
+    $app.innerHTML = '<h1>Ajustes</h1><div class="card"><h3 style="margin-top:0">Meu cadastro</h3><p class="small">' + esc(S.perfil.nome) + ' · ' + niveisReg().map(nomeNivel).map(esc).join(', ') + '</p><label for="nv">Nível que estou estudando</label><select id="nv">' + niveisReg().map(function (id) { return '<option value="' + id + '"' + (id === S.nivel ? ' selected' : '') + '>' + esc(nomeNivel(id)) + '</option>'; }).join('') + '</select><p class="small mut">Muda os tópicos, questões, simulado e apostilas. Seu progresso é mantido.</p><a class="btn sm" href="#/cadastro">✎ Editar cadastro / adicionar nível</a></div><div class="card"><label for="meta">Meta semanal (etapas concluídas por semana)</label><input type="number" id="meta" min="1" max="40" value="' + S.meta + '"></div>' +
       '<div class="card"><h3 style="margin-top:0">Backup do progresso</h3><p class="small mut">Seu progresso fica salvo neste aparelho. Para levar a outro (celular ↔ PC), exporte e importe o arquivo.</p><div class="row"><button class="btn" id="exp">⬇ Exportar</button><label class="btn" for="imp" style="margin:0">⬆ Importar</label><input type="file" id="imp" accept=".json,application/json" hidden></div></div>' +
       '<div class="card"><h3 style="margin-top:0">Apostilas em PDF</h3><div class="res">' + mats().map(function (m) { return '<a target="_blank" rel="noopener" href="pdf/apostila-' + S.nivel + '-' + m.id + '.pdf">' + esc(m.nome) + '</a>'; }).join('') + '<a target="_blank" rel="noopener" href="pdf/apostila-' + S.nivel + '-completa.pdf"><b>Apostila completa (' + esc(nvInfo().nome) + ')</b></a></div></div>' +
       '<div class="card"><h3 style="margin-top:0">Zerar tudo</h3><button class="btn" id="rst" style="color:var(--bad)">Apagar progresso deste aparelho</button></div>';
