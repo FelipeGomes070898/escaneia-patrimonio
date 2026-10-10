@@ -465,7 +465,10 @@
       '<p class="small mut">Se o banco tiver menos questões que o necessário em uma matéria, o simulado usa as disponíveis. O banco tem ' + qsOf().length + ' questões neste nível; cada simulado sorteia dentre elas, então elas se repetem.</p><button class="btn pri" id="sim-full">Iniciar simulado completo</button></div>';
     h += '<div class="card"><h3 style="margin-top:0">Mini-simulado</h3><p>cerca de ' + Math.round(tot * 0.4) + ' questões · ' + Math.round(mins * 0.4) + ' minutos · proporcional.</p><button class="btn" id="sim-mini">Iniciar mini-simulado</button></div>';
     if (S.sims.length) {
-      h += '<h2>Histórico</h2><div class="card" style="overflow-x:auto"><table><tr><th>Data</th><th>Questões</th><th>Acertos</th><th>Tempo</th><th></th></tr>' + S.sims.map(function (x, k) { return { x: x, k: k }; }).reverse().map(function (o) { var x = o.x; return '<tr><td>' + brDate(x.dia) + '</td><td>' + x.total + '</td><td>' + x.acertos + ' (' + pct(x.acertos, x.total) + '%)</td><td>' + Math.round(x.gasto / 60) + ' min</td><td>' + (x.ids ? '<a class="btn sm" href="#/simrev/' + o.k + '">Abrir</a>' : '<span class="small mut">sem detalhe</span>') + '</td></tr>'; }).join('') + '</table><p class="small mut" style="margin:.5rem 0 0">Toque em Abrir para rever a correção comentada ou refazer o mesmo simulado.</p></div>';
+      h += '<h2>Histórico</h2><p class="small mut" style="margin-top:-.3rem">Toque em um simulado para ver o que você acertou e errou.</p>' + S.sims.map(function (x, k) { return { x: x, k: k }; }).reverse().map(function (o) {
+        var x = o.x, p = pct(x.acertos, x.total);
+        return '<a class="hist" href="#/simrev/' + o.k + '"><span class="hist-d"><b>' + brDate(x.dia) + '</b><span class="small mut">' + (x.c ? esc(concInfo(x.c).nome + ' · ' + NV_CURTO[x.n]) + ' · ' : '') + x.total + ' questões · ' + Math.round(x.gasto / 60) + ' min</span></span><span class="hist-n"><b>' + x.acertos + '/' + x.total + '</b><span class="pill ' + (p >= 50 ? 'ok' : 'bad') + '">' + p + '%</span></span><span class="hist-go" aria-hidden="true">›</span></a>';
+      }).join('');
     }
     $app.innerHTML = h;
     function start(factor, dur) {
@@ -525,8 +528,27 @@
   /* Rever um simulado já feito (histórico) */
   function vSimRev(i) {
     var e = S.sims[+i];
-    if (!e || !e.ids) return go('#/simulados');
+    if (!e) return go('#/simulados');
+    if (!e.ids) return resumoAntigo(e);
     mostrarResultado(e, false);
+  }
+  /* Simulados feitos antes de o site guardar as respostas: só há o resumo e os erros registrados no dia */
+  function resumoAntigo(e) {
+    var p = pct(e.acertos, e.total);
+    var errosDia = Object.keys(S.erros).filter(function (id) { var q = qById(id); return q && visivel(q.m, q.t) && iso(new Date(S.erros[id].ts || 0)) === e.dia; });
+    var h = '<p><a href="#/simulados">← Simulados</a></p><h1>Simulado de ' + brDate(e.dia) + '</h1><div class="card"><div class="stat">' + e.acertos + ' / ' + e.total + ' (' + p + '%)</div>' + bar(p) +
+      '<p>' + (p >= 50 ? '<span class="pill ok">Acima dos 50% de nota mínima</span>' : '<span class="pill bad">Abaixo dos 50% de nota mínima</span>') + ' <span class="small mut">Tempo usado: ' + Math.round(e.gasto / 60) + ' min.</span></p></div>';
+    h += '<div class="aviso">Este simulado foi feito antes de o site guardar as respostas, então não dá para mostrar questão por questão. Os próximos simulados ficam salvos por completo.</div>';
+    if (e.porM) h += '<h2>Por matéria</h2><div class="card">' + Object.keys(e.porM).filter(function (m) { return mat(m); }).map(function (m) { var x = e.porM[m]; return '<div style="margin:.5rem 0"><div class="row"><b>' + esc(mat(m).nome) + '</b><span class="sp"></span>' + x.a + '/' + x.t + '</div>' + bar(pct(x.a, x.t), mat(m).cor) + '</div>'; }).join('') + '</div>';
+    h += '<h2>Questões que você errou nesse dia</h2><p class="small mut" style="margin-top:-.3rem">Vêm do caderno de erros (simulados e treinos feitos em ' + brDate(e.dia) + ').</p>';
+    if (!errosDia.length) h += '<div class="card">Nenhum erro registrado nesse dia.</div>';
+    errosDia.forEach(function (id) {
+      var q = qById(id), er = S.erros[id];
+      h += '<div class="card"><div class="small mut">' + esc(mat(q.m).nome) + ' · ' + esc(topico(q.m, q.t).titulo) + '</div><p>' + esc(q.q) + '</p><p class="small">' + (er.minha != null ? 'Sua resposta: ' + LET[er.minha] + ') ' + esc(q.a[er.minha]) + '<br>' : '') + 'Gabarito: <b>' + LET[q.g] + ') ' + esc(q.a[q.g]) + '</b></p><div class="expl small">' + esc(q.e) + '</div>' +
+        (C.x && C.x[q.id] ? '<details class="det-alts"><summary>Por que cada alternativa</summary>' + blocoAlternativas(q, er.minha) + '</details>' : '') + '</div>';
+    });
+    h += '<p><a class="btn pri" href="#/erros">Abrir caderno de erros</a> <a class="btn" href="#/simulados">Novo simulado</a></p>';
+    $app.innerHTML = h; window.scrollTo(0, 0);
   }
   function mostrarResultado(e, novo) {
     var porM = {}, porT = {}, acertos = 0;
@@ -662,7 +684,12 @@
   }
 
   /* ---------- Início ---------- */
-  if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) navigator.serviceWorker.register('sw.js').catch(function () { });
+  if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
+    /* Se uma versão nova assumir o controle, recarrega uma vez para mostrar a versão mais recente */
+    var tinhaSW = !!navigator.serviceWorker.controller, recarregou = false;
+    navigator.serviceWorker.addEventListener('controllerchange', function () { if (tinhaSW && !recarregou) { recarregou = true; location.reload(); } });
+    navigator.serviceWorker.register('sw.js').then(function (r) { return r.update(); }).catch(function () { });
+  }
   route();
   confirmarNivel();
 })();

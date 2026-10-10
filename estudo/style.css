@@ -106,3 +106,9 @@ table{width:100%;border-collapse:collapse;font-size:.92rem}th,td{padding:.4rem .
 .alt-c.chosen{border-left-color:var(--bad);background:var(--badbg)}.alt-c.chosen .alt-h{color:var(--bad)}
 .alt-c.other{border-left-color:var(--mut)}.alt-c.other .alt-h{color:var(--mut)}
 .det-alts{margin-top:.5rem}.det-alts>summary{cursor:pointer;font-weight:700;color:var(--pri);padding:.4rem 0}
+
+.hist{display:flex;align-items:center;gap:.8rem;padding:.8rem 1rem;margin:.5rem 0;border:1px solid var(--line);border-radius:var(--radius);background:var(--card);color:var(--ink);text-decoration:none}
+.hist:active,.hist:hover{border-color:var(--pri)}
+.hist-d{flex:1;display:flex;flex-direction:column;min-width:0}
+.hist-n{display:flex;flex-direction:column;align-items:flex-end;gap:.15rem;font-size:1.05rem}
+.hist-go{font-size:1.6rem;color:var(--mut);line-height:1}
