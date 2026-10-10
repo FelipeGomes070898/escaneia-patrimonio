@@ -6,7 +6,7 @@
   var $app = document.getElementById('app');
 
   /* ---------- Estado ---------- */
-  function defaults() { return { done: {}, answers: {}, erros: {}, rev: {}, notas: {}, links: {}, sims: [], cron: {}, meta: 5, tema: '', nivel: '', perfil: null }; }
+  function defaults() { return { done: {}, answers: {}, erros: {}, rev: {}, notas: {}, links: {}, sims: [], cron: {}, meta: 5, tema: '', nivel: '', perfil: null, dia: {}, metaq: 30, metaNota: 70 }; }
   var S = (function () { try { return Object.assign(defaults(), JSON.parse(localStorage.getItem(LS) || '{}')); } catch (e) { return defaults(); } })();
   function save() { try { localStorage.setItem(LS, JSON.stringify(S)); } catch (e) { /* sem armazenamento: segue em memória */ } }
   function loadSim() { try { return JSON.parse(localStorage.getItem(LSSIM) || 'null'); } catch (e) { return null; } }
@@ -64,6 +64,7 @@
   function record(q, ok) {
     var a = S.answers[q.id] || { tries: 0, hits: 0 };
     a.tries++; if (ok) a.hits++; a.last = ok; a.ts = Date.now(); S.answers[q.id] = a;
+    S.dia = S.dia || {}; S.dia[today()] = (S.dia[today()] || 0) + 1;
     if (!ok) { S.erros[q.id] = Object.assign(S.erros[q.id] || {}, { ts: Date.now(), res: false }); }
     else if (S.erros[q.id]) { S.erros[q.id].res = true; }
   }
@@ -161,7 +162,7 @@
     var marcados = edit ? niveisReg() : (S.nivel ? [S.nivel] : []);
     var nome = edit ? S.perfil.nome : '';
     var h = '<h1>' + (edit ? 'Meu cadastro' : 'Cadastre-se para entrar') + '</h1>' +
-      '<p class="mut">' + (edit ? 'Atualize seu nome ou os níveis da sua inscrição.' : 'Informe seu nome e o(s) nível(is) da prova para o(s) qual(is) você pagou a inscrição. O estudo é montado conforme o nível.') + '</p>' +
+      '<p class="mut">' + (edit ? 'Atualize seu nome ou os níveis da sua inscrição.' : 'Informe seu nome e o(s) nível(is) da prova para o(s) qual(is) você pagou a inscrição. Tudo no site é montado para você passar no nível escolhido: meta de nota, missão diária e foco nos seus pontos fracos.') + '</p>' +
       '<form id="cad" class="card" novalidate><label for="cd-nome">Seu nome</label><input type="text" id="cd-nome" maxlength="60" autocomplete="name" placeholder="Ex.: Maria Silva" value="' + esc(nome) + '">' +
       '<fieldset style="border:0;padding:0;margin:.8rem 0 0"><legend style="font-weight:600;margin-bottom:.3rem">Para qual(is) nível(is) você pagou a inscrição?</legend><p class="small mut" style="margin:0 0 .4rem">Marque 1, 2 ou 3 opções. Se pagou mais de um nível, você poderá alternar entre eles.</p>' +
       C.niveis.map(function (n) {
@@ -201,6 +202,74 @@
     Array.prototype.forEach.call($app.querySelectorAll('[data-n]'), function (b) { b.onclick = function () { S.nivel = b.getAttribute('data-n'); marcaSessao(); save(); go('#/'); }; });
   }
 
+  /* ---------- Foco na aprovação ---------- */
+  var DESEMPATE = ['especificos', 'portugues', 'legislacao', 'logica', 'gerais']; // edital 24/2026, item 10.4 (SEMED)
+  function dqs() { return C.dist[S.nivel].q; }
+  function totQ() { var d = dqs(); return Object.keys(d).reduce(function (a, k) { return a + d[k]; }, 0); }
+  function metaNota() { return S.metaNota || 70; }
+  function accOf(list) { var t = 0, h = 0; list.forEach(function (q) { var a = S.answers[q.id]; if (a) { t += a.tries; h += a.hits; } }); return { t: t, h: h, p: t ? h / t : null }; }
+  /* nota projetada: acerto atual em cada matéria ponderado pelo número de questões da prova */
+  function prontidao() {
+    var d = dqs(), tot = totQ(), proj = 0, medido = 0;
+    mats().forEach(function (m) { var w = (d[m.id] || 0) / tot, a = accOf(qsOf(m.id)); if (a.t >= 5) { proj += w * a.p; medido += w; } });
+    return { proj: medido ? proj / medido : null, medido: medido };
+  }
+  /* prioridade = peso do tópico na prova x (quanto falta para acertar), com bônus para o que nunca foi estudado */
+  function prioridades() {
+    var d = dqs(), tot = totQ(), out = [];
+    mats().forEach(function (m) {
+      var ts = topsOf(m);
+      ts.forEach(function (t) {
+        if (!qsOf(m.id, t.id).length) return; // sem questões não dá para medir: fica só na trilha
+        var a = accOf(qsOf(m.id, t.id)), w = (d[m.id] || 0) / tot / ts.length, nova = !topicDone(m.id, t.id, 1);
+        var gap = a.t >= 2 ? 1 - a.p : 0.6;
+        out.push({ m: m, t: t, a: a, nova: nova, score: w * (gap + (nova ? 0.15 : 0)) });
+      });
+    });
+    return out.sort(function (x, y) { return y.score - x.score; });
+  }
+  function motivo(x) { return (x.a.t >= 2 ? 'acerto ' + Math.round(x.a.p * 100) + '%' : 'sem dados ainda') + (x.nova ? ' · ainda não estudado' : ''); }
+  function listaFoco(n) {
+    var pool = [];
+    prioridades().slice(0, 6).forEach(function (x) {
+      qsOf(x.m.id, x.t.id).forEach(function (q) { var a = S.answers[q.id], peso = !a ? 3 : (a.last === false ? 4 : 1); for (var i = 0; i < peso; i++) pool.push(q); });
+    });
+    var seen = {}, out = [];
+    shuffle(pool).forEach(function (q) { if (!seen[q.id] && out.length < n) { seen[q.id] = 1; out.push(q); } });
+    return out;
+  }
+  function cardMeta() {
+    var pr = prontidao(), tot = totQ(), meta = metaNota(), minQ = Math.ceil(tot * 0.5), alvoQ = Math.ceil(tot * meta / 100);
+    var nota = pr.proj != null && pr.medido >= 0.5 ? Math.round(pr.proj * 100) : null;
+    var h = '<div class="card"><div class="row"><b>🎯 Meta: passar na prova</b><span class="sp"></span><span class="pill">' + esc(nvInfo().nome) + '</span></div>' +
+      '<p class="small" style="margin:.4rem 0">Nota mínima: <b>' + minQ + ' de ' + tot + '</b> (50%). Sua meta, com margem: <b>' + alvoQ + ' de ' + tot + '</b> (' + meta + '%).</p>';
+    if (nota == null) {
+      h += '<div class="aviso">Ainda não dá para projetar sua nota. Faça o <b>diagnóstico</b> (mini-simulado) para descobrir seus pontos fracos.</div><p><a class="btn pri" href="#/simulados">Fazer diagnóstico</a></p>';
+    } else {
+      var st = nota >= meta ? ['ok', 'Meta atingida: mantenha o ritmo'] : nota >= 50 ? ['warn', 'Acima do mínimo, mas sem margem'] : ['bad', 'Abaixo da nota mínima: foque nos pontos fracos'];
+      h += '<div class="row"><span class="stat">' + nota + '%</span><span class="small mut">nota projetada (' + Math.round(nota * tot / 100) + ' de ' + tot + ')</span><span class="sp"></span><span class="pill ' + st[0] + '">' + st[1] + '</span></div>' +
+        '<div class="meter" aria-hidden="true"><i style="width:' + Math.min(100, nota) + '%"></i><b style="left:50%" title="nota mínima"></b><b class="alvo" style="left:' + meta + '%" title="sua meta"></b></div><div class="small mut" style="display:flex;justify-content:space-between"><span>0%</span><span>mín. 50%</span><span>meta ' + meta + '%</span></div>';
+      if (pr.medido < 1) h += '<p class="small mut">Projeção com base nas matérias que você já treinou (' + Math.round(pr.medido * 100) + '% do peso da prova). Treine as demais para refinar.</p>';
+    }
+    h += '<p class="small mut" style="margin:.4rem 0 0">' + (C.dist[S.nivel].confirmada ? '' : 'Estrutura estimada: confirme no edital do seu cargo. ') + 'A nota mínima não garante a vaga: a classificação depende também da linha de corte e dos outros candidatos.</p></div>';
+    return h;
+  }
+  function cardMissao() {
+    var due = revDue().filter(function (x) { return x.r.due <= today(); }), pr = prioridades(), top = pr[0];
+    var abertos = Object.keys(S.erros).filter(function (id) { return qById(id) && visivel(qById(id).m, qById(id).t) && !S.erros[id].res; });
+    var feitas = (S.dia || {})[today()] || 0, metaq = S.metaq || 30;
+    var item = function (ok, txt, href) { return '<a class="chk" style="color:inherit;text-decoration:none" href="' + href + '"><span style="width:22px;text-align:center">' + (ok ? '✅' : '⬜') + '</span><span>' + txt + '</span></a>'; };
+    var h = '<div class="card"><div class="row"><b>📌 Missão de hoje</b><span class="sp"></span><span class="small mut">' + esc(RITMO[new Date().getDay()][1]) + '</span></div>';
+    if (due.length) h += item(false, 'Revisar <b>' + due.length + '</b> tópico(s) agendado(s)', '#/revisao');
+    if (top) h += item(false, 'Estudar o ponto de maior retorno: <b>' + esc(top.t.titulo) + '</b><div class="small mut">' + esc(top.m.nome) + ' · ' + motivo(top) + '</div>', '#/aula/' + top.m.id + '/' + top.t.id);
+    h += item(feitas >= 10, 'Treino focado: 10 questões nos seus pontos fracos', '#/quiz?foco=1&n=10');
+    if (abertos.length) h += item(false, 'Refazer erros do caderno (<b>' + abertos.length + '</b> abertos)', '#/quiz?ids=' + abertos.slice(0, 10).join(',') + '&n=10');
+    h += '<div style="margin-top:.5rem"><div class="small mut">Questões hoje: ' + feitas + ' de ' + metaq + '</div>' + bar(Math.min(100, pct(feitas, metaq))) + '</div></div>';
+    h += '<div class="card"><b>Onde estudar primeiro</b><p class="small mut" style="margin:.2rem 0 .4rem">Ordenado por peso na prova e por quanto falta para você acertar.</p><div class="list">' +
+      pr.slice(0, 5).map(function (x) { return '<a class="item" href="#/aula/' + x.m.id + '/' + x.t.id + '"><span class="dot" style="background:' + x.m.cor + '"></span><span style="flex:1"><b>' + esc(x.t.titulo) + '</b><br><span class="small mut">' + esc(x.m.nome) + ' · ' + motivo(x) + '</span></span></a>'; }).join('') + '</div></div>';
+    return h;
+  }
+
   /* ---------- Painel ---------- */
   var RITMO = { 1: ['portugues', 'Português'], 2: ['logica', 'Raciocínio Lógico'], 3: ['legislacao', 'Legislação'], 4: ['especificos', 'Conhecimentos Específicos'], 5: [null, 'Revisão e Conhecimentos Gerais'], 6: [null, 'Simulado'], 0: [null, 'Caderno de erros (dia leve)'] };
   function diasPara(dt) { return Math.ceil((new Date(dt) - new Date()) / 86400000); }
@@ -215,10 +284,8 @@
     var geral = acc(function () { return true; });
     var h = '<h1>Olá, ' + esc(primeiroNome()) + '! Vamos estudar?</h1><p class="small mut" style="margin-top:-.3rem">Nível: <b>' + esc(nvInfo().nome) + '</b> · <a href="#/' + (niveisReg().length > 1 ? 'nivel' : 'cadastro') + '">' + (niveisReg().length > 1 ? 'alternar nível' : 'editar cadastro') + '</a></p>';
     h += '<div class="grid c2">' + C.provas.map(function (p) { var d = diasPara(p.data); return '<div class="card"><div class="mut small">Prova ' + esc(p.nome) + '</div><div class="stat">' + (d >= 0 ? d + ' dias' : 'Prova realizada') + '</div><div class="small mut">' + brDate(p.data.slice(0, 10)) + ' às ' + p.data.slice(11, 16).replace(':', 'h') + ' (confirmar no edital)</div></div>'; }).join('') + '</div>';
-    h += '<div class="card"><div class="row"><b>' + esc(v.nome) + '</b><span class="sp"></span><span class="pill">' + esc(r[1]) + ' hoje</span></div>';
-    h += '<p class="small mut" style="margin:.3rem 0">Rotina do dia: teoria dirigida 60 min · questões 90 min · revisão ativa 30 min (resumo de 1 página + caderno de erros).</p>';
-    if (prox) h += '<a class="btn pri" href="#/aula/' + prox.m.id + '/' + prox.t.id + '">▶ Próxima aula: ' + esc(prox.t.titulo) + '</a>'; else h += '<p>🎉 Você concluiu todos os tópicos desta volta.</p>';
-    h += '</div>';
+    h += cardMeta() + cardMissao();
+    h += '<div class="card"><div class="row"><b>' + esc(v.nome) + '</b></div><p class="small mut" style="margin:.3rem 0">Rotina do dia: teoria dirigida 60 min · questões 90 min · revisão ativa 30 min (resumo de 1 página + caderno de erros).</p>' + (prox ? '<a class="btn" href="#/aula/' + prox.m.id + '/' + prox.t.id + '">▶ Seguir a trilha: ' + esc(prox.t.titulo) + '</a>' : '<p>🎉 Você concluiu todos os tópicos desta volta.</p>') + '</div>';
     h += '<div class="grid c3"><div class="card"><div class="mut small">Revisões para hoje</div><div class="stat">' + due.length + '</div><a href="#/revisao">Abrir revisão</a></div>';
     h += '<div class="card"><div class="mut small">Meta da semana (' + feitosSem + '/' + S.meta + ' etapas)</div>' + bar(Math.min(100, pct(feitosSem, S.meta))) + '<div class="small mut" style="margin-top:.4rem">Ajuste em Ajustes.</div></div>';
     h += '<div class="card"><div class="mut small">Acertos gerais</div><div class="stat">' + (geral.tries ? geral.p + '%' : '--') + '</div><div class="small mut">' + geral.hits + ' de ' + geral.tries + ' respostas</div></div></div>';
@@ -293,7 +360,7 @@
 
   /* ---------- Quiz com correção imediata ---------- */
   function vPraticar() {
-    var h = '<h1>Questões</h1><div class="card"><label for="pm">Matéria</label><select id="pm"><option value="">Todas</option>' + mats().map(function (m) { return '<option value="' + m.id + '">' + esc(m.nome) + '</option>'; }).join('') + '</select>' +
+    var h = '<h1>Questões</h1><div class="card"><b>🎯 Treino focado na aprovação</b><p class="small mut" style="margin:.2rem 0 .5rem">Mistura questões dos tópicos que mais pesam na prova e onde você mais erra.</p><a class="btn pri" href="#/quiz?foco=1&n=10">Treino focado (10)</a> <a class="btn" href="#/quiz?foco=1&n=20">20 questões</a></div><div class="card"><label for="pm">Matéria</label><select id="pm"><option value="">Todas</option>' + mats().map(function (m) { return '<option value="' + m.id + '">' + esc(m.nome) + '</option>'; }).join('') + '</select>' +
       '<label for="pt">Tópico</label><select id="pt"><option value="">Todos</option></select>' +
       '<label for="pn">Quantidade</label><select id="pn"><option>5</option><option selected>10</option><option>20</option><option value="999">Todas</option></select>' +
       '<label for="pf">Filtro</label><select id="pf"><option value="">Todas</option><option value="novas">Só as que ainda não fiz</option><option value="erradas">Só as que errei</option></select>' +
@@ -307,6 +374,7 @@
     var list = qsOf(q.m, q.t);
     if (q.f === 'novas') list = list.filter(function (x) { return !S.answers[x.id]; });
     if (q.f === 'erradas') list = list.filter(function (x) { return S.erros[x.id] && !S.erros[x.id].res; });
+    if (q.foco) list = listaFoco(+q.n || 10);
     if (q.ids) list = q.ids.split(',').map(qById).filter(Boolean);
     list = shuffle(list).slice(0, +q.n || 10);
     if (!list.length) { $app.innerHTML = '<div class="card"><p>Nenhuma questão encontrada com esse filtro.</p><a class="btn" href="#/praticar">Voltar</a></div>'; return; }
@@ -416,6 +484,8 @@
     var p = pct(acertos, s.ids.length);
     var h = '<h1>Resultado do simulado</h1><div class="card"><div class="stat">' + acertos + ' / ' + s.ids.length + ' (' + p + '%)</div>' + bar(p) +
       '<p>' + (p >= 50 ? '<span class="pill ok">Acima dos 50% exigidos de nota mínima</span>' : '<span class="pill bad">Abaixo dos 50% de nota mínima</span>') + ' <span class="small mut">Tempo usado: ' + Math.round(gasto / 60) + ' min. A nota mínima de aprovação é 50% do total de pontos (edital 24/2026, item 10.1); a classificação depende também da linha de corte.</span></p></div>';
+    var alvoQ = Math.ceil(s.ids.length * metaNota() / 100), minQ = Math.ceil(s.ids.length * 0.5);
+    h += '<div class="card"><b>🎯 Rumo à aprovação</b><p style="margin:.3rem 0">' + (acertos >= alvoQ ? 'Você atingiu a sua meta (' + alvoQ + ' acertos).' : 'Faltaram <b>' + (alvoQ - acertos) + '</b> acerto(s) para a sua meta (' + alvoQ + ')' + (acertos < minQ ? ' e <b>' + (minQ - acertos) + '</b> para a nota mínima (' + minQ + ')' : '') + '.') + '</p><a class="btn pri" href="#/quiz?foco=1&n=10">Treinar pontos fracos agora</a></div>';
     h += '<h2>Por matéria</h2><div class="card">' + Object.keys(porM).map(function (m) { var x = porM[m]; return '<div style="margin:.5rem 0"><div class="row"><b>' + esc(mat(m).nome) + '</b><span class="sp"></span>' + x.a + '/' + x.t + '</div>' + bar(pct(x.a, x.t), mat(m).cor) + '</div>'; }).join('') + '</div>';
     var fracos = Object.keys(porT).filter(function (k) { return porT[k].a < porT[k].t; }).sort(function (a, b) { return pct(porT[a].a, porT[a].t) - pct(porT[b].a, porT[b].t); });
     h += '<h2>Tópicos para reforçar</h2><div class="card list">' + (fracos.length ? fracos.map(function (k) { var pp = k.split('/'); return '<a class="item" href="#/aula/' + pp[0] + '/' + pp[1] + '"><span style="flex:1">' + esc(topico(pp[0], pp[1]).titulo) + '</span><span class="small mut">' + porT[k].a + '/' + porT[k].t + '</span></a>'; }).join('') : '<p>Parabéns, nenhum erro!</p>') + '</div>';
@@ -512,11 +582,13 @@
     $app.innerHTML = '<h1>Mais</h1><div class="card list">' + [['#/erros', '📓 Caderno de erros'], ['#/revisao', '🔁 Revisão espaçada'], ['#/cronograma', '📅 Cronograma'], ['#/edital', '📄 Edital e regras da prova'], ['#/config', '⚙️ Ajustes e backup']].map(function (x) { return '<a class="item" href="' + x[0] + '">' + x[1] + '</a>'; }).join('') + '</div>';
   }
   function vConfig() {
-    $app.innerHTML = '<h1>Ajustes</h1><div class="card"><h3 style="margin-top:0">Meu cadastro</h3><p class="small">' + esc(S.perfil.nome) + ' · ' + niveisReg().map(nomeNivel).map(esc).join(', ') + '</p><label for="nv">Nível que estou estudando</label><select id="nv">' + niveisReg().map(function (id) { return '<option value="' + id + '"' + (id === S.nivel ? ' selected' : '') + '>' + esc(nomeNivel(id)) + '</option>'; }).join('') + '</select><p class="small mut">Muda os tópicos, questões, simulado e apostilas. Seu progresso é mantido.</p><a class="btn sm" href="#/cadastro">✎ Editar cadastro / adicionar nível</a></div><div class="card"><label for="meta">Meta semanal (etapas concluídas por semana)</label><input type="number" id="meta" min="1" max="40" value="' + S.meta + '"></div>' +
+    $app.innerHTML = '<h1>Ajustes</h1><div class="card"><h3 style="margin-top:0">Meu cadastro</h3><p class="small">' + esc(S.perfil.nome) + ' · ' + niveisReg().map(nomeNivel).map(esc).join(', ') + '</p><label for="nv">Nível que estou estudando</label><select id="nv">' + niveisReg().map(function (id) { return '<option value="' + id + '"' + (id === S.nivel ? ' selected' : '') + '>' + esc(nomeNivel(id)) + '</option>'; }).join('') + '</select><p class="small mut">Muda os tópicos, questões, simulado e apostilas. Seu progresso é mantido.</p><a class="btn sm" href="#/cadastro">✎ Editar cadastro / adicionar nível</a></div><div class="card"><h3 style="margin-top:0">Minha meta</h3><label for="mn">Meta de acertos na prova (%) - a nota mínima é 50%</label><input type="number" id="mn" min="50" max="100" value="' + metaNota() + '"><label for="mq">Questões por dia</label><input type="number" id="mq" min="5" max="200" value="' + (S.metaq || 30) + '"></div><div class="card"><label for="meta">Meta semanal (etapas concluídas por semana)</label><input type="number" id="meta" min="1" max="40" value="' + S.meta + '"></div>' +
       '<div class="card"><h3 style="margin-top:0">Backup do progresso</h3><p class="small mut">Seu progresso fica salvo neste aparelho. Para levar a outro (celular ↔ PC), exporte e importe o arquivo.</p><div class="row"><button class="btn" id="exp">⬇ Exportar</button><label class="btn" for="imp" style="margin:0">⬆ Importar</label><input type="file" id="imp" accept=".json,application/json" hidden></div></div>' +
       '<div class="card"><h3 style="margin-top:0">Apostilas em PDF</h3><div class="res">' + mats().map(function (m) { return '<a target="_blank" rel="noopener" href="pdf/apostila-' + S.nivel + '-' + m.id + '.pdf">' + esc(m.nome) + '</a>'; }).join('') + '<a target="_blank" rel="noopener" href="pdf/apostila-' + S.nivel + '-completa.pdf"><b>Apostila completa (' + esc(nvInfo().nome) + ')</b></a></div></div>' +
       '<div class="card"><h3 style="margin-top:0">Zerar tudo</h3><button class="btn" id="rst" style="color:var(--bad)">Apagar progresso deste aparelho</button></div>';
     document.getElementById('nv').onchange = function (e) { S.nivel = e.target.value; save(); toast('Nível: ' + nvInfo().nome); vConfig(); };
+    document.getElementById('mn').onchange = function (e) { S.metaNota = Math.min(100, Math.max(50, +e.target.value || 70)); save(); toast('Meta salva'); };
+    document.getElementById('mq').onchange = function (e) { S.metaq = Math.min(200, Math.max(5, +e.target.value || 30)); save(); toast('Meta salva'); };
     document.getElementById('meta').onchange = function (e) { S.meta = Math.max(1, +e.target.value || 5); save(); toast('Meta salva'); };
     document.getElementById('exp').onclick = function () {
       var b = new Blob([JSON.stringify(S)], { type: 'application/json' }), a = document.createElement('a');

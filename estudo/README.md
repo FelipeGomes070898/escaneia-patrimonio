@@ -13,6 +13,15 @@ Na primeira visita o site pergunta o nível (**fundamental, médio ou superior**
 - **Fundamental:** 17 tópicos básicos (sem secretaria escolar, LDB, redação oficial etc.). Estrutura da prova **estimada**.
 - **Superior:** base do médio + redação discursiva + orientação para os Específicos do cargo (29 tópicos). Estrutura **estimada**; os Específicos dependem do Anexo IV do seu cargo.
 
+## Foco na aprovação
+Depois do cadastro tudo gira em torno de passar no nível escolhido:
+- **Meta de aprovação:** nota mínima (50%, edital 24/2026 item 10.1) e uma meta pessoal com margem (padrão 70%, ajustável).
+- **Diagnóstico e nota projetada:** o mini-simulado e as respostas alimentam uma projeção ponderada pelo número de questões de cada matéria.
+- **Missão de hoje:** revisões, ponto de maior retorno, treino focado, erros abertos e meta diária de questões.
+- **Onde estudar primeiro:** ordena os tópicos pelo peso na prova e por quanto falta para acertar.
+- **Treino focado:** sorteia questões dos tópicos prioritários, dando mais chance às que você errou.
+- A nota mínima não garante a vaga: depende da linha de corte e dos outros candidatos.
+
 ## O que tem
 | Tela | Para quê |
 |---|---|
