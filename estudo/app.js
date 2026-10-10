@@ -25,6 +25,14 @@
   function qById(id) { return C.questoes.filter(function (q) { return q.id === id; })[0]; }
   function qsOf(m, t) { return C.questoes.filter(function (q) { return (!m || q.m === m) && (!t || q.t === t); }); }
   function tkey(m, t) { return m + '/' + t; }
+  function ask(msg, yes) {
+    var o = document.createElement('div'); o.className = 'modal';
+    o.innerHTML = '<div class="box" role="dialog" aria-modal="true"><p>' + esc(msg) + '</p><div class="row"><button class="btn pri" id="ask-y">Sim</button><button class="btn" id="ask-n">Cancelar</button></div></div>';
+    document.body.appendChild(o);
+    o.querySelector('#ask-n').onclick = function () { o.remove(); };
+    o.querySelector('#ask-y').onclick = function () { o.remove(); yes(); };
+    o.querySelector('#ask-y').focus();
+  }
   function toast(msg) { var d = document.createElement('div'); d.className = 'toast'; d.textContent = msg; document.body.appendChild(d); setTimeout(function () { d.remove(); }, 2200); }
   function pct(a, b) { return b ? Math.round(100 * a / b) : 0; }
   function bar(p, cor) { return '<div class="bar"><i style="width:' + p + '%' + (cor ? ';background:' + cor : '') + '"></i></div>'; }
@@ -276,7 +284,7 @@
     }
     document.getElementById('sim-full').onclick = function () { start(1, 180 * 60); };
     document.getElementById('sim-mini').onclick = function () { start(0.4, 70 * 60); };
-    var d = document.getElementById('sim-drop'); if (d) d.onclick = function () { if (confirm('Descartar o simulado em andamento?')) { saveSim(null); vSimulados(); } };
+    var d = document.getElementById('sim-drop'); if (d) d.onclick = function () { ask('Descartar o simulado em andamento?', function () { saveSim(null); vSimulados(); }); };
   }
   function fmt(sec) { sec = Math.max(0, sec); var h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = sec % 60; return pad(h) + ':' + pad(m) + ':' + pad(s); }
   function vSimRun() {
@@ -300,7 +308,7 @@
       document.getElementById('nx').onclick = function () { s.i++; saveSim(s); draw(); };
       document.getElementById('fin').onclick = function () {
         var vazias = s.ids.filter(function (id) { return s.resp[id] == null; }).length;
-        if (confirm(vazias ? 'Há ' + vazias + ' questões em branco. Finalizar mesmo assim?' : 'Finalizar o simulado?')) finish(s);
+        ask(vazias ? 'Há ' + vazias + ' questões em branco. Finalizar mesmo assim?' : 'Finalizar o simulado?', function () { finish(s); });
       };
     }
     draw();
@@ -431,7 +439,7 @@
       r.onload = function () { try { var o = JSON.parse(r.result); if (typeof o !== 'object' || !o) throw 0; S = Object.assign(defaults(), o); save(); toast('Progresso importado'); route(); } catch (x) { toast('Arquivo inválido'); } };
       r.readAsText(f);
     };
-    document.getElementById('rst').onclick = function () { if (confirm('Apagar TODO o progresso deste aparelho? Isso não pode ser desfeito.')) { S = defaults(); save(); saveSim(null); toast('Progresso apagado'); route(); } };
+    document.getElementById('rst').onclick = function () { ask('Apagar TODO o progresso deste aparelho? Isso não pode ser desfeito.', function () { S = defaults(); save(); saveSim(null); toast('Progresso apagado'); route(); }); };
   }
 
   /* ---------- Início ---------- */
