@@ -161,7 +161,7 @@
     if (!edit) { document.getElementById('sidenav').innerHTML = ''; document.getElementById('bottomnav').innerHTML = ''; }
     var marcados = edit ? niveisReg() : (S.nivel ? [S.nivel] : []);
     var nome = edit ? S.perfil.nome : '';
-    var h = '<h1>' + (edit ? 'Meu cadastro' : 'Cadastre-se para entrar') + '</h1>' +
+    var h = (edit ? '' : '<div class="card" style="border-left:6px solid var(--pri)"><b>Bem-vindo(a) à Rota do Concurso</b><p class="small" style="margin:.3rem 0">Concursos de Porto Velho/RO 2026. Primeiro o cadastro; depois o sistema monta o seu estudo para passar:</p><ul class="small" style="margin:.2rem 0;padding-left:1.1rem"><li>meta de nota e nota projetada</li><li>missão diária e foco nos seus pontos fracos</li><li>simulados, caderno de erros e revisão espaçada</li></ul></div>') + '<h1>' + (edit ? 'Meu cadastro' : 'Cadastre-se para entrar') + '</h1>' +
       '<p class="mut">' + (edit ? 'Atualize seu nome ou os níveis da sua inscrição.' : 'Informe seu nome e o(s) nível(is) da prova para o(s) qual(is) você pagou a inscrição. Tudo no site é montado para você passar no nível escolhido: meta de nota, missão diária e foco nos seus pontos fracos.') + '</p>' +
       '<form id="cad" class="card" novalidate><label for="cd-nome">Seu nome</label><input type="text" id="cd-nome" maxlength="60" autocomplete="name" placeholder="Ex.: Maria Silva" value="' + esc(nome) + '">' +
       '<fieldset style="border:0;padding:0;margin:.8rem 0 0"><legend style="font-weight:600;margin-bottom:.3rem">Para qual(is) nível(is) você pagou a inscrição?</legend><p class="small mut" style="margin:0 0 .4rem">Marque 1, 2 ou 3 opções. Se pagou mais de um nível, você poderá alternar entre eles.</p>' +
