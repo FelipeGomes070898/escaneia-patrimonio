@@ -17,11 +17,12 @@ const srv = http.createServer((req, res) => {
   const browser = await chromium.launch(exe ? { executablePath: exe } : {});
   const ids = ['portugues', 'logica', 'legislacao', 'especificos', 'gerais', 'completa'];
   fs.mkdirSync(path.join(raiz, 'pdf'), { recursive: true });
-  for (const id of ids) {
+  for (const nv of ['fundamental', 'medio', 'superior']) for (const id of ids) {
     const page = await browser.newPage();
-    await page.goto(`${base}/print.html?m=${id === 'completa' ? 'all' : id}`);
-    await page.waitForSelector('body[data-ready="1"]');
-    const out = path.join(raiz, 'pdf', `apostila-${id}.pdf`);
+    await page.goto(`${base}/print.html?nv=${nv}&m=${id === 'completa' ? 'all' : id}`);
+    const pronto = await page.waitForSelector('body[data-ready="1"]', { timeout: 5000 }).catch(() => null);
+    if (!pronto) { await page.close(); continue; } // matéria sem tópicos neste nível
+    const out = path.join(raiz, 'pdf', `apostila-${nv}-${id}.pdf`);
     await page.pdf({ path: out, format: 'A4', margin: { top: '16mm', bottom: '16mm', left: '16mm', right: '16mm' }, printBackground: true, displayHeaderFooter: true,
       headerTemplate: '<span></span>', footerTemplate: '<div style="font-size:8px;width:100%;text-align:center;color:#666">Rota do Concurso · Porto Velho 2026 · página <span class="pageNumber"></span> de <span class="totalPages"></span></div>' });
     console.log('ok', out, fs.statSync(out).size);

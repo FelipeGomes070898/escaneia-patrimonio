@@ -31,24 +31,28 @@
 <script src="data/legislacao.js"></script>
 <script src="data/especificos.js"></script>
 <script src="data/gerais.js"></script>
+<script src="data/superior.js"></script>
 <script>
 (function () {
   var C = window.CONC, L = ['A', 'B', 'C', 'D', 'E'];
-  var id = new URLSearchParams(location.search).get('m') || 'all';
+  var qs0 = new URLSearchParams(location.search), id = qs0.get('m') || 'all', nv = qs0.get('nv') || 'medio';
+  var NOME = C.niveis.filter(function (n) { return n.id === nv; })[0].nome;
+  function vis(t) { return t.nv.indexOf(nv) >= 0; }
+  function visQ(q) { var m = C.materias.filter(function (x) { return x.id === q.m; })[0]; return vis(m.topicos.filter(function (t) { return t.id === q.t; })[0]); }
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
-  var ms = C.materias.filter(function (m) { return id === 'all' || m.id === id; });
+  var ms = C.materias.filter(function (m) { return (id === 'all' || m.id === id) && m.topicos.some(vis); });
   var titulo = id === 'all' ? 'Apostila completa' : ms[0].nome;
   document.title = 'Apostila - ' + titulo;
-  var h = '<div class="capa"><div class="mut">Concursos de Porto Velho/RO 2026 · Agente de Secretaria Escolar (SEMED, banca IBGP)</div><h1>' + esc(titulo) + '</h1>' +
+  var h = '<div class="capa"><div class="mut">Concursos de Porto Velho/RO 2026 · ' + NOME + ' · banca IBGP</div><h1>' + esc(titulo) + '</h1>' +
     '<div class="mut">Material original em 3 camadas: contexto → básico → aprofundado. Gerado em ' + new Date().toLocaleDateString('pt-BR') + '.</div></div>' +
     '<div class="aviso"><b>Atenção:</b> o conteúdo é <b>provável</b>. O Anexo IV do edital nº 24/2026 (conteúdo programático oficial) não estava no PDF consultado; os itens marcados <b>A CONFIRMAR NO EDITAL</b> devem ser conferidos em www.ibgpconcursos.com.br. Textos e questões foram escritos do zero, sem copiar provas ou apostilas.</div>';
   ms.forEach(function (m) {
-    h += '<section class="mat"><h1 style="color:' + m.cor + '">' + esc(m.nome) + '</h1><div class="mut">Prova SEMED: ' + m.questoes + ' questões (' + m.peso + ')</div><p class="mut">' + esc(m.banca) + '</p>';
-    m.topicos.forEach(function (t, i) {
+    h += '<section class="mat"><h1 style="color:' + m.cor + '">' + esc(m.nome) + '</h1><div class="mut">' + (nv === 'medio' ? 'Prova SEMED (nível médio): ' + m.questoes + ' questões (' + m.peso + ')' : 'Distribuição de questões neste nível: A CONFIRMAR NO EDITAL') + '</div><p class="mut">' + esc(m.banca) + '</p>';
+    m.topicos.filter(vis).forEach(function (t, i) {
       h += '<div class="topico"><h2>' + (i + 1) + '. ' + esc(t.titulo) + '</h2>' +
         '<h3>Contexto</h3>' + t.contexto + '<h3>Resumo básico</h3>' + t.basico + '<h3>Aprofundamento</h3>' + t.aprofundado + '</div>';
     });
-    var qs = C.questoes.filter(function (q) { return q.m === m.id; });
+    var qs = C.questoes.filter(function (q) { return q.m === m.id && visQ(q); });
     h += '<h2>Exercícios</h2>';
     qs.forEach(function (q, i) {
       h += '<div class="q"><b>' + (i + 1) + '.</b> ' + esc(q.q) + '<ul class="alts">' + q.a.map(function (a, k) { return '<li>' + L[k] + ') ' + esc(a) + '</li>'; }).join('') + '</ul></div>';
