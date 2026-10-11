@@ -12,7 +12,7 @@
   function chaveSim() { return 'estudo.sim.' + UID; }
 
   /* ---------- Estado ---------- */
-  function defaults() { return { done: {}, answers: {}, erros: {}, rev: {}, notas: {}, links: {}, sims: [], cron: {}, meta: 5, tema: '', nivel: '', concurso: '', perfil: null, dia: {}, metaq: 30, metaNota: 70 }; }
+  function defaults() { return { done: {}, answers: {}, erros: {}, rev: {}, notas: {}, links: {}, sims: [], cron: {}, meta: 5, tema: '', nivel: '', concurso: '', perfil: null, dia: {}, metaq: 30, metaNota: 70, visto: {}, retomar: null, quizAtual: null, conclAvisada: {} }; }
   var S = defaults();
   function carregar() { try { S = Object.assign(defaults(), JSON.parse(lsGet(chave()) || '{}')); } catch (e) { S = defaults(); } }
   function save() { if (UID) lsSet(chave(), JSON.stringify(S)); }
@@ -72,16 +72,23 @@
     return { login: raw.toLowerCase() };
   }
   function mostraLogin(l) { l = String(l); if (l.indexOf('tel:') !== 0) return l; var d = l.slice(4); return '(' + d.slice(0, 2) + ') ' + (d.length === 11 ? d.slice(2, 7) + '-' + d.slice(7) : d.slice(2, 6) + '-' + d.slice(6)); }
+  function migraDono() {
+    var l = usuarios(); if (l.length && !l.some(function (u) { return u.dono; })) { l.slice().sort(function (a, b) { return a.criado - b.criado; })[0].dono = true; salvaUsuarios(l); }
+  }
+  function ehDono() { var u = usuarioAtual(); return !!(u && u.dono); }
   function usuarioAtual() { return usuarios().filter(function (u) { return u.id === UID; })[0] || null; }
   function sessaoId() { var v = ''; try { v = sessionStorage.getItem('estudo.sessao') || ''; } catch (e) { } return v || lsGet('estudo.sessao') || ''; }
   function iniciaSessao(id, lembrar) {
-    try { sessionStorage.setItem('estudo.sessao', id); sessionStorage.removeItem('estudo.nvok'); } catch (e) { }
+    try { sessionStorage.setItem('estudo.sessao', id); sessionStorage.removeItem('estudo.nvok'); sessionStorage.removeItem('estudo.retomado'); } catch (e) { }
     if (lembrar) lsSet('estudo.sessao', id); else lsDel('estudo.sessao');
-    UID = id; nivelConfirmado = false; carregar(); applyTheme();
+    UID = id; nivelConfirmado = false; carregar(); guardaRetomar(); applyTheme(); iniciaVisita();
   }
+  /* cópia de "onde parou" da visita anterior: a visita atual vai sobrescrever S.retomar */
+  var retomarAnterior = null;
+  function guardaRetomar() { retomarAnterior = S.retomar ? JSON.parse(JSON.stringify(S.retomar)) : null; }
   function encerraSessao() {
     try { sessionStorage.removeItem('estudo.sessao'); sessionStorage.removeItem('estudo.nvok'); } catch (e) { }
-    lsDel('estudo.sessao'); UID = ''; S = defaults(); nivelConfirmado = false; loginModo = 'entrar'; applyTheme();
+    salvaTudo(); T.sess = null; T.sim = null; lsDel('estudo.sessao'); UID = ''; S = defaults(); nivelConfirmado = false; loginModo = 'entrar'; applyTheme();
   }
   function b64(bytes) { var t = ''; for (var i = 0; i < bytes.length; i++) t += String.fromCharCode(bytes[i]); return btoa(t); }
   function deB64(t) { var r = atob(t), o = new Uint8Array(r.length); for (var i = 0; i < r.length; i++) o[i] = r.charCodeAt(i); return o; }
@@ -119,6 +126,65 @@
     return new Promise(function (ok) { var h = sal + unescape(encodeURIComponent(senha)); for (var i = 0; i < 5000; i++) h = sha256hex(h); ok('f:' + h); });
   }
   function senhaConfere(u, senha) { return hashSenha(senha, u.sal, String(u.h).charAt(0)).then(function (h) { return h != null && h === u.h; }); }
+
+  /* ---------- Tempo de estudo: só conta com a página visível, com foco e com atividade ---------- */
+  var T = { ativo: false, input: Date.now(), tick: Date.now(), n: 0, m: null, t: null, estudo: false, sim: null, sess: null, motivo: '' };
+  var ESTUDO_ROTAS = ['aula', 'materia', 'quiz', 'simulado', 'simrev', 'erros', 'revisao', 'resumo', 'praticar', 'trilha'];
+  function idleMax() { return (window.ESTUDO_IDLE || 180) * 1000; } /* parado por 3 min = pausa */
+  function tempoDe() { S.tempo = S.tempo || { site: 0, estudo: 0, dias: {}, mats: {}, topicos: {}, sessoes: [] }; return S.tempo; }
+  function atividade() { S.atividade = S.atividade || { entradas: 0, ultima: 0, ping: 0 }; return S.atividade; }
+  function motivoPausa() {
+    if (!UID || !S.perfil) return 'sem login';
+    if (document.hidden) return 'página fechada ou em segundo plano';
+    if (document.hasFocus && !document.hasFocus()) return 'janela sem foco';
+    if (Date.now() - T.input >= idleMax()) return 'sem atividade';
+    return '';
+  }
+  function marcaContexto(p, q) {
+    var v = p[1] || ''; T.estudo = ESTUDO_ROTAS.indexOf(v) >= 0; T.m = null; T.t = null;
+    if (v === 'aula') { T.m = p[2]; T.t = p[3]; } else if (v === 'materia' || (v === 'resumo' && p[2])) T.m = p[2]; else if (v === 'quiz' && q.m) { T.m = q.m; T.t = q.t || null; }
+  }
+  function iniciaVisita() {
+    var a = atividade(); a.entradas++; a.ultima = Date.now(); a.ping = Date.now();
+    T.sess = { ini: Date.now(), seg: 0 }; var tp = tempoDe(); tp.sessoes.push(T.sess); if (tp.sessoes.length > 40) tp.sessoes.shift();
+    T.input = Date.now(); T.tick = Date.now(); save();
+  }
+  function tempoTick() {
+    var now = Date.now(), d = Math.min((now - T.tick) / 1000, 2.5); T.tick = now;
+    T.motivo = motivoPausa(); var at = !T.motivo;
+    if (at !== T.ativo) { T.ativo = at; if (UID) save(); }
+    if (UID && S.perfil) {
+      atividade().ping = now;
+      if (at) {
+        var tp = tempoDe(); tp.site += d;
+        if (T.estudo) {
+          tp.estudo += d; var dia = today(); tp.dias[dia] = (tp.dias[dia] || 0) + d;
+          if (T.m) tp.mats[T.m] = (tp.mats[T.m] || 0) + d;
+          if (T.m && T.t) { var k = T.m + '/' + T.t; tp.topicos[k] = (tp.topicos[k] || 0) + d; }
+          if (T.sess) T.sess.seg += d;
+        }
+        if (T.sim) T.sim.dec = (T.sim.dec || 0) + d;
+      }
+      if (++T.n % 10 === 0) { save(); if (T.sim) saveSim(T.sim); }
+    }
+    desenhaPill();
+  }
+  function salvaTudo() { tempoTick(); if (UID) { save(); if (T.sim) saveSim(T.sim); } }
+  ['pointerdown', 'keydown', 'scroll', 'touchstart', 'mousemove', 'click', 'wheel'].forEach(function (ev) { window.addEventListener(ev, function () { T.input = Date.now(); }, { passive: true, capture: true }); });
+  document.addEventListener('visibilitychange', function () { if (document.hidden) salvaTudo(); else { T.input = Date.now(); T.tick = Date.now(); tempoTick(); } });
+  window.addEventListener('pagehide', salvaTudo); window.addEventListener('blur', salvaTudo);
+  window.addEventListener('focus', function () { T.tick = Date.now(); T.input = Date.now(); tempoTick(); });
+  function fmtH(sec) { sec = Math.floor(sec); return pad(Math.floor(sec / 3600)) + ':' + pad(Math.floor(sec % 3600 / 60)) + ':' + pad(sec % 60); }
+  function fmtDur(sec) { sec = Math.round(sec || 0); if (sec < 60) return sec + ' s'; var h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60); return h ? h + ' h ' + pad(m) + ' min' : m + ' min'; }
+  function desenhaPill() {
+    var el = document.getElementById('tpill');
+    if (!el) { el = document.createElement('div'); el.id = 'tpill'; el.setAttribute('role', 'status'); document.body.appendChild(el); }
+    var ver = !!UID && !!S.perfil; el.hidden = !ver; if (!ver) return;
+    el.className = 'tpill ' + (T.ativo ? 'on' : 'off');
+    el.innerHTML = '<span class="tp-d"></span><span class="tp-t">' + fmtH(tempoDe().dias[today()] || 0) + '</span><span class="tp-s">' + (T.ativo ? (T.estudo ? 'estudando hoje' : 'hoje') : 'pausado') + '</span>';
+    el.title = T.ativo ? 'Tempo de estudo de hoje. Pausa sozinho se você sair da página ou ficar parado por 3 minutos.' : 'Cronômetro pausado: ' + T.motivo;
+  }
+  setInterval(tempoTick, 1000);
 
   /* ---------- Tema ---------- */
   function applyTheme() { if (S.tema) document.documentElement.setAttribute('data-theme', S.tema); else document.documentElement.removeAttribute('data-theme'); }
@@ -178,8 +244,9 @@
   function drawNav(h) {
     var cur = h.split('?')[0], chip = document.getElementById('nvchip'), ni = nvInfo();
     if (chip) { chip.hidden = !ni; chip.textContent = ni && S.concurso ? '🎓 ' + concInfo(S.concurso).nome + ' · ' + NV_CURTO[S.nivel] : ''; chip.title = 'Seu nível cadastrado. Toque para trocar.'; }
-    function on(href) { if (href === '#/') return cur === '#/' || cur === ''; if (href === '#/mais') return ['#/mais', '#/erros', '#/revisao', '#/cronograma', '#/edital', '#/config', '#/conta'].indexOf(cur) >= 0; return cur.indexOf(href) === 0 || (href === '#/trilha' && /^#\/(materia|aula)/.test(cur)) || (href === '#/praticar' && cur.indexOf('#/quiz') === 0); }
-    document.getElementById('sidenav').innerHTML = SIDE.map(function (n) { return '<a href="' + n[0] + '" class="' + (on(n[0]) ? 'on' : '') + '">' + n[1] + '</a>'; }).join('');
+    function on(href) { if (href === '#/') return cur === '#/' || cur === ''; if (href === '#/mais') return ['#/mais', '#/erros', '#/revisao', '#/cronograma', '#/edital', '#/config', '#/conta', '#/resumo', '#/dono'].indexOf(cur) >= 0 || cur.indexOf('#/dono') === 0; return cur.indexOf(href) === 0 || (href === '#/trilha' && /^#\/(materia|aula)/.test(cur)) || (href === '#/praticar' && cur.indexOf('#/quiz') === 0); }
+    var SIDE2 = ehDono() ? SIDE.concat([['#/dono', 'Dono', '🛡️']]) : SIDE;
+    document.getElementById('sidenav').innerHTML = SIDE2.map(function (n) { return '<a href="' + n[0] + '" class="' + (on(n[0]) ? 'on' : '') + '">' + n[1] + '</a>'; }).join('');
     document.getElementById('bottomnav').innerHTML = NAV.map(function (n) { return '<a href="' + n[0] + '" class="' + (on(n[0]) ? 'on' : '') + '"><span class="ic">' + n[2] + '</span>' + n[1] + '</a>'; }).join('');
   }
 
@@ -189,6 +256,7 @@
     var h = location.hash || '#/';
     var p = h.split('?')[0].split('/'); // ['#','x',...]
     var q = {}; (h.split('?')[1] || '').split('&').forEach(function (kv) { if (kv) { var a = kv.split('='); q[a[0]] = decodeURIComponent(a[1] || ''); } });
+    T.sim = null; marcaContexto(p, q);
     if (!UID) return vLogin();
     if (!S.perfil) { drawNav(h); return vCadastro(); }
     migraPerfil();
@@ -196,9 +264,9 @@
     drawNav(h);
     var v = p[1] || '';
     var fn = {
-      '': vPainel, trilha: vTrilha, materia: function () { vMateria(p[2]); }, aula: function () { vAula(p[2], p[3]); },
+      '': vPainel, trilha: vTrilha, materia: function () { vMateria(p[2]); }, aula: function () { vAula(p[2], p[3], q.aba); },
       praticar: vPraticar, simrev: function () { vSimRev(p[2]); }, quiz: function () { vQuiz(q); }, simulados: vSimulados, simulado: vSimRun, erros: vErros,
-      revisao: vRevisao, conta: vConta, nivel: vNivel, cadastro: vCadastro, cronograma: vCron, edital: vEdital, config: vConfig, mais: vMais
+      revisao: vRevisao, dono: function () { if (p[2]) vDonoUser(p[2]); else vDono(); }, resumo: function () { vResumo(p[2]); }, conta: vConta, nivel: vNivel, cadastro: vCadastro, cronograma: vCron, edital: vEdital, config: vConfig, mais: vMais
     }[v] || vPainel;
     fn();
     window.scrollTo(0, 0);
@@ -247,7 +315,7 @@
         if (!u) return erro('Usuário ou senha incorretos.');
         return senhaConfere(u, pw).then(function (ok) {
           if (!ok) return erro(String(u.h).charAt(0) === 'p' && !(window.crypto && crypto.subtle) ? 'Este navegador não consegue verificar a senha aqui. Abra o site pelo endereço https.' : 'Usuário ou senha incorretos.');
-          iniciaSessao(u.id, lembrar()); go('#/'); route(); confirmarNivel();
+          iniciaSessao(u.id, lembrar()); go('#/'); route(); confirmarNivel(); if (!document.querySelector('.modal')) oferecerRetomar();
         });
       }
       var nome = document.getElementById('lg-nome').value.replace(/\s+/g, ' ').trim(), pw2 = document.getElementById('lg-pw2').value;
@@ -259,7 +327,7 @@
       if (us.some(function (x) { return x.login === login; })) return erro('Já existe uma conta com ' + (loginTipo === 'celular' ? 'esse celular' : loginTipo === 'email' ? 'esse e-mail' : 'esse usuário') + ' neste aparelho. Entre na conta ou use outro.');
       var sal = novoSal();
       return hashSenha(pw, sal).then(function (hh) {
-        var nu = { id: 'u' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36), nome: nome, login: login, sal: sal, h: hh, criado: Date.now() };
+        var nu = { dono: us.length === 0, id: 'u' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36), nome: nome, login: login, sal: sal, h: hh, criado: Date.now() };
         us.push(nu); salvaUsuarios(us);
         if (us.length === 1 && lsGet(LS_LEGADO)) { /* primeira conta do aparelho: adota o progresso de antes */
           lsSet('estudo.v1.' + nu.id, lsGet(LS_LEGADO)); lsSet('estudo.v1.legado-backup', lsGet(LS_LEGADO)); lsDel(LS_LEGADO);
@@ -297,6 +365,61 @@
     };
   }
 
+  /* ---------- Área do dono: contas deste aparelho (progresso, tempo e atividade) ---------- */
+  function dadosDe(id) { if (id === UID) return S; try { return Object.assign(defaults(), JSON.parse(lsGet('estudo.v1.' + id) || '{}')); } catch (e) { return defaults(); } }
+  function fmtDT(ts) { if (!ts) return '--'; var d = new Date(ts); return pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()); }
+  function resumoUsuario(u) {
+    var d = dadosDe(u.id), a = d.atividade || { entradas: 0, ultima: 0, ping: 0 }, tp = d.tempo || { site: 0, estudo: 0, dias: {}, mats: {}, topicos: {}, sessoes: [] };
+    var online = u.id === UID ? T.ativo : (Date.now() - (a.ping || 0) < 45000);
+    var hoje = (tp.dias || {})[today()] || 0, sem = 0; for (var i = 0; i < 7; i++) sem += (tp.dias || {})[addDays(today(), -i)] || 0;
+    var tries = 0, hits = 0; Object.keys(d.answers || {}).forEach(function (id) { tries += d.answers[id].tries; hits += d.answers[id].hits; });
+    var feitos = Object.keys(d.done || {}).filter(function (k) { return d.done[k] && d.done[k].v1; }).length;
+    var sims = d.sims || [], media = sims.length ? Math.round(sims.reduce(function (x, y) { return x + pct(y.acertos, y.total); }, 0) / sims.length) : null;
+    var abertos = Object.keys(d.erros || {}).filter(function (id) { return !d.erros[id].res; }).length;
+    var onde = ''; if (d.retomar) { var r = d.retomar, mm = r.m && mat(r.m), tt = r.m && r.t && topico(r.m, r.t); onde = r.tipo === 'aula' && mm && tt ? mm.nome + ' · ' + tt.titulo : r.tipo === 'quiz' ? 'fazendo questões' : r.tipo === 'simulado' ? 'em um simulado' : mm ? mm.nome : ''; }
+    return { u: u, d: d, a: a, tp: tp, online: online, hoje: hoje, sem: sem, tries: tries, hits: hits, acc: pct(hits, tries), feitos: feitos, sims: sims, media: media, abertos: abertos, onde: onde, insc: ((d.perfil && d.perfil.insc) || []).map(rotulo) };
+  }
+  function pillOn(r) { return r.online ? '<span class="pill ok">🟢 online agora</span>' : '<span class="pill">⚪ ' + (r.a.ping ? 'visto ' + ha(r.a.ping) : 'nunca entrou') + '</span>'; }
+  function vDono() {
+    if (!ehDono()) return go('#/');
+    var us = usuarios().map(resumoUsuario);
+    var h = '<h1>Área do dono</h1><div class="aviso"><b>Escopo desta tela:</b> mostra as contas criadas <b>neste aparelho</b>. O site não tem servidor, então não dá para ver quem acessa de outros celulares ou computadores. Veja no README como ligar um servidor para enxergar todos.</div>';
+    h += '<div class="grid c3" style="margin-top:.7rem"><div class="card"><div class="small mut">Contas neste aparelho</div><div class="stat">' + us.length + '</div></div><div class="card"><div class="small mut">Online agora</div><div class="stat">' + us.filter(function (r) { return r.online; }).length + '</div></div><div class="card"><div class="small mut">Estudaram hoje</div><div class="stat">' + us.filter(function (r) { return r.hoje > 0; }).length + '</div></div></div>';
+    h += '<h2>Usuários</h2>';
+    us.sort(function (x, y) { return (y.a.ping || 0) - (x.a.ping || 0); }).forEach(function (r) {
+      var u = r.u;
+      h += '<a class="card" style="display:block;color:inherit;text-decoration:none" href="#/dono/' + u.id + '"><div class="row"><b>' + esc(u.nome) + '</b>' + (u.dono ? '<span class="pill warn">dono</span>' : '') + (u.id === UID ? '<span class="pill">você</span>' : '') + '<span class="sp"></span>' + pillOn(r) + '</div>' +
+        '<div class="small mut">' + esc(TIPOS[tipoDoLogin(u.login)].nome.toLowerCase() + ': ' + mostraLogin(u.login)) + (r.insc.length ? ' · ' + esc(r.insc.join(', ')) : '') + '</div>' +
+        '<div class="grid c3" style="margin-top:.5rem;gap:.4rem"><div><div class="small mut">Última entrada</div><b>' + fmtDT(r.a.ultima) + '</b></div><div><div class="small mut">Estudou hoje</div><b>' + fmtDur(r.hoje) + '</b></div><div><div class="small mut">Total estudando</div><b>' + fmtDur(r.tp.estudo) + '</b></div></div>' +
+        '<div class="small mut" style="margin-top:.4rem">' + r.a.entradas + ' entrada(s) · ' + r.feitos + ' tópico(s) concluído(s) · ' + (r.tries ? 'acerto ' + r.acc + '%' : 'sem questões') + (r.onde ? ' · estudando: ' + esc(r.onde) : '') + '</div></a>';
+    });
+    $app.innerHTML = h;
+    timerId = setInterval(function () { if ((location.hash || '') === '#/dono') vDono(); }, 5000);
+  }
+  function vDonoUser(id) {
+    if (!ehDono()) return go('#/');
+    var u = usuarios().filter(function (x) { return x.id === id; })[0]; if (!u) return go('#/dono');
+    var r = resumoUsuario(u), tp = r.tp, h = '<p><a href="#/dono">← Área do dono</a></p><h1>' + esc(u.nome) + '</h1><div class="row">' + pillOn(r) + '<span class="small mut">' + esc(TIPOS[tipoDoLogin(u.login)].nome.toLowerCase() + ': ' + mostraLogin(u.login)) + ' · conta criada em ' + brDate(iso(new Date(u.criado))) + '</span></div>';
+    h += '<div class="grid c3" style="margin-top:.6rem"><div class="card"><div class="small mut">Última entrada</div><div class="stat" style="font-size:1.2rem">' + fmtDT(r.a.ultima) + '</div><div class="small mut">' + r.a.entradas + ' entrada(s)</div></div><div class="card"><div class="small mut">Tempo estudando (hoje / 7 dias)</div><div class="stat" style="font-size:1.2rem">' + fmtDur(r.hoje) + ' / ' + fmtDur(r.sem) + '</div><div class="small mut">total ' + fmtDur(tp.estudo) + '</div></div><div class="card"><div class="small mut">Tempo no site (total)</div><div class="stat" style="font-size:1.2rem">' + fmtDur(tp.site) + '</div><div class="small mut">inclui telas fora do estudo</div></div></div>';
+    if (r.onde) h += '<div class="card"><b>Onde parou:</b> ' + esc(r.onde) + (r.d.retomar ? ' · ' + ha(r.d.retomar.ts) : '') + '</div>';
+    var dias = [], max = 1; for (var i = 13; i >= 0; i--) { var dd = addDays(today(), -i), sec = (tp.dias || {})[dd] || 0; dias.push({ dd: dd, sec: sec }); if (sec > max) max = sec; }
+    h += '<h2>Tempo de estudo por dia (14 dias)</h2><div class="card"><div class="dbars">' + dias.map(function (x) { return '<div class="db" title="' + brDate(x.dd) + ': ' + fmtDur(x.sec) + '"><i style="height:' + Math.max(3, Math.round(100 * x.sec / max)) + '%"></i><span>' + x.dd.slice(8) + '</span></div>'; }).join('') + '</div><div class="small mut">Maior dia: ' + fmtDur(max === 1 ? 0 : max) + '</div></div>';
+    h += '<h2>Por matéria</h2><div class="card">' + C.materias.map(function (m) {
+      var seg = (tp.mats || {})[m.id] || 0, a = { t: 0, h: 0 }; Object.keys(r.d.answers || {}).forEach(function (qid) { var q = qById(qid); if (q && q.m === m.id) { a.t += r.d.answers[qid].tries; a.h += r.d.answers[qid].hits; } });
+      var vistos = Object.keys(r.d.done || {}).filter(function (k) { return k.indexOf(m.id + '/') === 0 && r.d.done[k].v1; }).length;
+      return '<div style="margin:.55rem 0"><div class="row"><b>' + esc(m.nome) + '</b><span class="sp"></span><span class="small mut">' + fmtDur(seg) + ' · ' + vistos + ' tópico(s) concluído(s) · ' + (a.t ? 'acerto ' + pct(a.h, a.t) + '%' : 'sem questões') + '</span></div>' + bar(a.t ? pct(a.h, a.t) : 0, m.cor) + '</div>';
+    }).join('') + '</div>';
+    var tops = Object.keys(tp.topicos || {}).sort(function (a, b) { return tp.topicos[b] - tp.topicos[a]; }).slice(0, 8);
+    if (tops.length) h += '<h2>Tópicos em que mais estudou</h2><div class="card">' + tops.map(function (k) { var pp = k.split('/'), t = topico(pp[0], pp[1]); return t ? '<div class="row" style="padding:.2rem 0"><span style="flex:1">' + esc(t.titulo) + '</span><b>' + fmtDur(tp.topicos[k]) + '</b></div>' : ''; }).join('') + '</div>';
+    h += '<h2>Simulados e questões</h2><div class="card"><div class="small">' + r.sims.length + ' simulado(s)' + (r.media != null ? ' · média ' + r.media + '%' : '') + ' · ' + r.tries + ' resposta(s) · acerto geral ' + (r.tries ? r.acc + '%' : '--') + ' · ' + r.abertos + ' erro(s) aberto(s)</div>' +
+      (r.sims.length ? '<table style="margin-top:.4rem"><tr><th>Data</th><th>Acertos</th><th>Tempo</th></tr>' + r.sims.slice(-5).reverse().map(function (x) { return '<tr><td>' + brDate(x.dia) + '</td><td>' + x.acertos + '/' + x.total + ' (' + pct(x.acertos, x.total) + '%)</td><td>' + Math.round(x.gasto / 60) + ' min</td></tr>'; }).join('') + '</table>' : '') + '</div>';
+    var ss = (tp.sessoes || []).slice(-8).reverse();
+    if (ss.length) h += '<h2>Últimas visitas</h2><div class="card"><table><tr><th>Entrou</th><th>Estudou</th></tr>' + ss.map(function (x) { return '<tr><td>' + fmtDT(x.ini) + '</td><td>' + fmtDur(x.seg) + '</td></tr>'; }).join('') + '</table></div>';
+    if (r.insc.length) h += '<div class="card"><b>Inscrições:</b> ' + esc(r.insc.join(' · ')) + '</div>';
+    $app.innerHTML = h;
+    timerId = setInterval(function () { if ((location.hash || '') === '#/dono/' + id) vDonoUser(id); }, 5000);
+  }
+
   /* ---------- Cadastro: concurso(s) + nível pago em cada um ---------- */
   var NV_CURTO = { fundamental: 'Fundamental', medio: 'Médio', superior: 'Superior' };
   function concInfo(id) { return C.concursos.filter(function (x) { return x.id === id; })[0] || C.concursos[0]; }
@@ -332,10 +455,10 @@
     }
     o.innerHTML = '<div class="box" role="dialog" aria-modal="true">' + corpo + '</div>';
     document.body.appendChild(o);
-    function fecha() { marcaSessao(); o.remove(); }
-    var ok = o.querySelector('#nv-ok'); if (ok) { ok.onclick = fecha; ok.focus(); }
-    o.querySelector('#nv-troca').onclick = function () { fecha(); go('#/cadastro'); };
-    Array.prototype.forEach.call(o.querySelectorAll('[data-pick]'), function (b) { b.onclick = function () { var i = reg[+b.getAttribute('data-pick')]; setAlvo(i.c, i.n); save(); fecha(); route(); }; });
+    function fecha(sem) { marcaSessao(); o.remove(); if (!sem) oferecerRetomar(); }
+    var ok = o.querySelector('#nv-ok'); if (ok) { ok.onclick = function () { fecha(); }; ok.focus(); }
+    o.querySelector('#nv-troca').onclick = function () { fecha(true); go('#/cadastro'); };
+    Array.prototype.forEach.call(o.querySelectorAll('[data-pick]'), function (b) { b.onclick = function () { var i = reg[+b.getAttribute('data-pick')]; setAlvo(i.c, i.n); save(); fecha(true); route(); oferecerRetomar(); }; });
   }
 
   function vCadastro() {
@@ -394,6 +517,130 @@
     h += '<p><a class="btn" href="#/cadastro">✎ Editar cadastro / adicionar inscrição</a></p>';
     $app.innerHTML = h;
     Array.prototype.forEach.call($app.querySelectorAll('[data-i]'), function (b) { b.onclick = function () { var i = reg[+b.getAttribute('data-i')]; setAlvo(i.c, i.n); marcaSessao(); save(); go('#/'); }; });
+  }
+
+  /* ---------- Memória de estudo: onde parou, o que já viu e o resumo pessoal ---------- */
+  var ABAS = ['Contexto', 'Básico', 'Aprofundado'];
+  function txt(html) { return String(html || '').replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim(); }
+  function pontos(html, n) { var out = [], re = /<li>([\s\S]*?)<\/li>/g, m; while ((m = re.exec(html || '')) && out.length < n) out.push(txt(m[1]).slice(0, 150)); return out; }
+  function foiVisto(mid, tid) { var k = tkey(mid, tid); return !!(S.visto && S.visto[k]) || topicDone(mid, tid, 1) || topicDone(mid, tid, 2) || topicDone(mid, tid, 3); }
+  function estudados(mid) { return topsOf(mat(mid)).filter(function (t) { return foiVisto(mid, t.id); }); }
+  function marcaVisto(mid, tid, aba) {
+    var k = tkey(mid, tid); S.visto = S.visto || {};
+    var v = S.visto[k] || { abas: [false, false, false], ts: 0 }; v.abas[aba] = true; v.ts = Date.now(); S.visto[k] = v;
+    S.retomar = { tipo: 'aula', m: mid, t: tid, aba: aba, hash: '#/aula/' + mid + '/' + tid + '?aba=' + aba, ts: Date.now() }; save();
+  }
+  function ha(ts) { var s = Math.max(0, Math.round((Date.now() - ts) / 1000)); if (s < 90) return 'agora há pouco'; if (s < 3600) return 'há ' + Math.round(s / 60) + ' min'; if (s < 86400) return 'há ' + Math.floor(s / 3600) + ' h'; return 'há ' + Math.floor(s / 86400) + ' dia(s)'; }
+  function descreveRetomar(r) {
+    var m = r.m && mat(r.m), t = r.m && r.t && topico(r.m, r.t), qa = S.quizAtual, sm = loadSim();
+    if (r.tipo === 'aula' && m && t) return { mat: r.m, titulo: m.nome + ' · ' + t.titulo, onde: 'lendo a aula (aba ' + ABAS[r.aba || 0] + ')' };
+    if (r.tipo === 'quiz' && qa) { var q0 = qById(qa.ids[Math.min(qa.i, qa.ids.length - 1)]); var m2 = q0 && mat(q0.m); return { mat: q0 && q0.m, titulo: (m2 ? m2.nome + ' · ' : '') + 'questões', onde: 'fazendo questões (' + qa.i + ' de ' + qa.ids.length + ' respondidas)' }; }
+    if (r.tipo === 'simulado' && sm) return { mat: null, titulo: 'Simulado', onde: 'em um simulado (' + Object.keys(sm.resp).length + ' de ' + sm.ids.length + ' questões respondidas; o tempo ficou parado)' };
+    if (r.tipo === 'materia' && m) return { mat: r.m, titulo: m.nome, onde: 'na trilha da matéria' };
+    return null;
+  }
+  /* "Skill" pessoal: o que a pessoa estudou na matéria, no que errou e o que anotou */
+  function skillPessoal(mid) {
+    var m = mat(mid), vis = estudados(mid), tot = topsOf(m).length, linhas = [];
+    if (!vis.length) return { linhas: ['Você ainda não abriu nenhum tópico de ' + m.nome + '.'], vis: vis };
+    linhas.push('Você já viu <b>' + vis.length + ' de ' + tot + '</b> tópicos de ' + esc(m.nome) + ': ' + vis.map(function (t) { return esc(t.titulo); }).join('; ') + '.');
+    vis.slice(-2).forEach(function (t) { var p = pontos(t.basico, 2); if (p.length) linhas.push('<b>' + esc(t.titulo) + ':</b> ' + p.map(esc).join(' · ')); });
+    var pior = null; vis.forEach(function (t) { var a = accOf(qsOf(mid, t.id)); if (a.t >= 2 && (!pior || a.p < pior.p)) pior = { t: t, p: a.p }; });
+    if (pior && pior.p < 0.8) linhas.push('Ponto de atenção: <b>' + esc(pior.t.titulo) + '</b> (acerto ' + Math.round(pior.p * 100) + '%).');
+    var ultimo = vis[vis.length - 1], nota = S.notas[tkey(mid, ultimo.id)];
+    if (nota) linhas.push('Sua anotação em ' + esc(ultimo.titulo) + ': "' + esc(nota.slice(0, 160)) + '"');
+    var seg = (tempoDe().mats || {})[mid]; if (seg) linhas.push('Tempo estudado nesta matéria: <b>' + fmtDur(seg) + '</b>.');
+    return { linhas: linhas, vis: vis };
+  }
+  function recomecarMateria(mid) {
+    var m = mat(mid);
+    ask('Recomeçar ' + m.nome + ' do início? O progresso nos tópicos (voltas concluídas e "já vi") será zerado. Suas anotações, erros e histórico continuam.', function () {
+      topsOf(m).forEach(function (t) { var k = tkey(mid, t.id); delete S.done[k]; delete S.rev[k]; if (S.visto) delete S.visto[k]; });
+      S.quizAtual = null; S.retomar = { tipo: 'materia', m: mid, hash: '#/materia/' + mid, ts: Date.now() }; save(); toast('Matéria reiniciada'); go('#/aula/' + mid + '/' + topsOf(m)[0].id);
+    });
+  }
+  function oferecerRetomar() {
+    if (!UID || !S.perfil || !retomarAnterior) return;
+    var hh = location.hash || '';
+    if (/^#\/(nivel|cadastro|conta)/.test(hh)) return;
+    try { if (sessionStorage.getItem('estudo.retomado')) return; sessionStorage.setItem('estudo.retomado', '1'); } catch (e) { }
+    var r = retomarAnterior, d = descreveRetomar(r); if (!d) return;
+    var sk = d.mat ? skillPessoal(d.mat) : null;
+    var o = document.createElement('div'); o.className = 'modal';
+    o.innerHTML = '<div class="box" role="dialog" aria-modal="true" style="max-height:88vh;overflow:auto"><div class="small mut">Continuar de onde parou?</div><h2 style="margin:.2rem 0">▶ ' + esc(d.titulo) + '</h2><p class="small">Você estava ' + esc(d.onde) + ' · ' + ha(r.ts) + '.</p>' +
+      (sk ? '<div class="expl small"><b>O que você estudou até aqui</b><ul style="margin:.3rem 0;padding-left:1.1rem">' + sk.linhas.map(function (l) { return '<li style="margin:.2rem 0">' + l + '</li>'; }).join('') + '</ul>' + (d.mat ? '<a href="#/resumo/' + d.mat + '" id="rt-res">Ver o resumo completo desta matéria</a>' : '') + '</div>' : '') +
+      '<div style="display:grid;gap:.5rem;margin-top:.7rem"><button class="btn pri" id="rt-ok">▶ Continuar de onde parei</button>' + (d.mat ? '<button class="btn" id="rt-re">🔁 Recomeçar esta matéria</button>' : '') + '<button class="btn" id="rt-no">Ir para o painel</button></div></div>';
+    document.body.appendChild(o);
+    function fecha() { o.remove(); }
+    o.querySelector('#rt-ok').onclick = function () { fecha(); go(r.tipo === 'quiz' ? '#/quiz?resume=1' : r.hash); };
+    var re = o.querySelector('#rt-re'); if (re) re.onclick = function () { fecha(); recomecarMateria(d.mat); };
+    o.querySelector('#rt-no').onclick = fecha;
+    var lk = o.querySelector('#rt-res'); if (lk) lk.onclick = fecha;
+    o.querySelector('#rt-ok').focus();
+  }
+
+  /* ---------- Resumo do que foi estudado ---------- */
+  function concluida(mid) { var ts = topsOf(mat(mid)); return ts.length > 0 && ts.every(function (t) { return topicDone(mid, t.id, 1); }); }
+  function verConclusaoMateria(mid) {
+    if (!concluida(mid)) return; S.conclAvisada = S.conclAvisada || {}; if (S.conclAvisada[mid]) return; S.conclAvisada[mid] = true; save();
+    var o = document.createElement('div'); o.className = 'modal';
+    o.innerHTML = '<div class="box" role="dialog" aria-modal="true"><h2 style="margin:0 0 .3rem">🎉 Matéria concluída!</h2><p>Você terminou todos os tópicos de <b>' + esc(mat(mid).nome) + '</b>. Quer ver o resumo de tudo que estudou?</p><div class="row"><button class="btn pri" id="mc-ok">Ver resumo</button><button class="btn" id="mc-no">Depois</button></div></div>';
+    document.body.appendChild(o);
+    o.querySelector('#mc-no').onclick = function () { o.remove(); };
+    o.querySelector('#mc-ok').onclick = function () { o.remove(); go('#/resumo/' + mid); };
+  }
+  function contextoMateria(mid) {
+    var m = mat(mid), ts = topsOf(m), vis = estudados(mid), feitos = ts.filter(function (t) { return topicDone(mid, t.id, 1); });
+    if (!vis.length) return 'Você ainda não começou ' + esc(m.nome) + '. O primeiro tópico é <b>' + esc(ts[0].titulo) + '</b>.';
+    var primeiro = Math.min.apply(null, vis.map(function (t) { var v = (S.visto || {})[tkey(mid, t.id)]; return v ? v.ts : Date.now(); }));
+    var ult = null; vis.forEach(function (t) { var v = (S.visto || {})[tkey(mid, t.id)]; if (v && (!ult || v.ts > ult.ts)) ult = { t: t, ts: v.ts }; });
+    var melhor = null, pior = null; vis.forEach(function (t) { var a = accOf(qsOf(mid, t.id)); if (a.t >= 2) { if (!melhor || a.p > melhor.p) melhor = { t: t, p: a.p }; if (!pior || a.p < pior.p) pior = { t: t, p: a.p }; } });
+    var falta = ts.filter(function (t) { return !foiVisto(mid, t.id); });
+    var h = 'Você começou ' + esc(m.nome) + ' em <b>' + brDate(iso(new Date(primeiro))) + '</b>. Já viu <b>' + vis.length + ' de ' + ts.length + '</b> tópicos e concluiu a primeira volta em <b>' + feitos.length + '</b>.';
+    if (ult) h += ' O último que abriu foi <b>' + esc(ult.t.titulo) + '</b> (' + ha(ult.ts) + ').';
+    if (melhor && pior && melhor.t !== pior.t) h += ' Seu melhor tópico é <b>' + esc(melhor.t.titulo) + '</b> (' + Math.round(melhor.p * 100) + '% de acerto) e o ponto de atenção é <b>' + esc(pior.t.titulo) + '</b> (' + Math.round(pior.p * 100) + '%).';
+    else if (melhor) h += ' Acerto em ' + esc(melhor.t.titulo) + ': ' + Math.round(melhor.p * 100) + '%.';
+    h += falta.length ? ' Ainda falta ver: ' + falta.map(function (t) { return esc(t.titulo); }).join('; ') + '.' : ' Você já passou por todos os tópicos desta matéria.';
+    return h;
+  }
+  function vResumo(mid) {
+    if (!mid) {
+      var h = '<h1>Resumo do que estudei</h1><p class="mut">Tudo o que você já viu, matéria por matéria, com o contexto para lembrar de onde parou. Fica pronto para revisar a qualquer momento e completo quando você termina a matéria.</p>';
+      mats().forEach(function (m) {
+        var vis = estudados(m.id).length, tot = topsOf(m).length, seg = (tempoDe().mats || {})[m.id] || 0, ok = concluida(m.id);
+        h += '<a class="card" style="display:block;color:inherit;text-decoration:none;border-left:6px solid ' + m.cor + '" href="#/resumo/' + m.id + '"><div class="row"><b>' + esc(m.nome) + '</b><span class="sp"></span>' + (ok ? '<span class="pill ok">concluída</span>' : '<span class="pill">' + vis + '/' + tot + ' vistos</span>') + '</div>' + bar(pct(vis, tot), m.cor) + '<div class="small mut" style="margin-top:.3rem">' + (seg ? 'Tempo estudado: ' + fmtDur(seg) : 'Ainda sem tempo registrado') + '</div></a>';
+      });
+      $app.innerHTML = h; return;
+    }
+    var m = mat(mid); if (!m) return go('#/resumo');
+    var ts = topsOf(m), vis = estudados(mid), seg = (tempoDe().mats || {})[mid] || 0, ok = concluida(mid), ac = accOf(qsOf(mid));
+    var h2 = '<p class="noprint"><a href="#/resumo">← Resumo</a></p><h1>' + esc(m.nome) + '</h1><div class="row">' + (ok ? '<span class="pill ok">matéria concluída 🎉</span>' : '<span class="pill">em andamento</span>') + '<span class="small mut">' + vis.length + ' de ' + ts.length + ' tópicos vistos · ' + fmtDur(seg) + ' de estudo' + (ac.t ? ' · acerto ' + Math.round(ac.p * 100) + '%' : '') + '</span></div>';
+    h2 += '<div class="card"><h3 style="margin-top:0">🧭 Contexto para lembrar</h3><p style="margin:.2rem 0">' + contextoMateria(mid) + '</p></div>';
+    h2 += '<h2>O que você estudou</h2>';
+    if (!vis.length) h2 += '<div class="card">Nada ainda. <a href="#/materia/' + mid + '">Abrir a trilha</a>.</div>';
+    vis.forEach(function (t, idx) {
+      var k = tkey(mid, t.id), v = (S.visto || {})[k], a = accOf(qsOf(mid, t.id)), tp = (tempoDe().topicos || {})[k] || 0;
+      var erros = Object.keys(S.erros).filter(function (id) { var q = qById(id); return q && q.m === mid && q.t === t.id && !S.erros[id].res; });
+      h2 += '<details class="card"' + (idx === vis.length - 1 ? ' open' : '') + '><summary style="cursor:pointer"><b>' + esc(t.titulo) + '</b> <span class="small mut">' + [1, 2, 3].map(function (n) { return topicDone(mid, t.id, n) ? '●' : '○'; }).join(' ') + (tp ? ' · ' + fmtDur(tp) : '') + (a.t ? ' · acerto ' + Math.round(a.p * 100) + '%' : '') + '</span></summary>' +
+        '<div class="lesson"><h3>Contexto</h3>' + t.contexto + '<h3>Resumo básico</h3>' + t.basico + '<h3>Aprofundamento</h3>' + t.aprofundado + '</div>' +
+        (S.notas[k] ? '<div class="expl small"><b>Sua anotação:</b> ' + esc(S.notas[k]) + '</div>' : '') +
+        (erros.length ? '<h3>Erros que ainda estão abertos e a regra correta</h3>' + erros.map(function (id) { var q = qById(id); return '<div class="expl small"><b>' + esc(q.q) + '</b><br>Gabarito: ' + LET[q.g] + ') ' + esc(q.a[q.g]) + '<br>' + esc(q.e) + '</div>'; }).join('') : '') +
+        '<p class="noprint"><a class="btn sm" href="#/aula/' + mid + '/' + t.id + '">Reabrir a aula</a></p></details>';
+    });
+    var falta = ts.filter(function (t) { return !foiVisto(mid, t.id); });
+    if (falta.length) h2 += '<h2>Ainda não vistos</h2><div class="card list">' + falta.map(function (t) { return '<a class="item" href="#/aula/' + mid + '/' + t.id + '"><span style="flex:1">' + esc(t.titulo) + '</span><span class="small mut">abrir ›</span></a>'; }).join('') + '</div>';
+    h2 += '<div class="row noprint"><a class="btn pri" href="#/materia/' + mid + '">Voltar à trilha</a><button class="btn" id="rs-print">🖨 Imprimir / salvar em PDF</button><button class="btn" id="rs-re">🔁 Recomeçar a matéria</button></div>';
+    $app.innerHTML = h2;
+    document.getElementById('rs-print').onclick = function () { window.print(); };
+    document.getElementById('rs-re').onclick = function () { recomecarMateria(mid); };
+  }
+  function cardRetomar() {
+    var r = S.retomar, d = r && descreveRetomar(r); if (!d) return '';
+    return '<div class="card" style="border-left:6px solid var(--ok)"><div class="row"><b>▶ Continuar de onde parei</b><span class="sp"></span><span class="small mut">' + ha(r.ts) + '</span></div><p style="margin:.3rem 0"><b>' + esc(d.titulo) + '</b><br><span class="small mut">Você estava ' + esc(d.onde) + '.</span></p><div class="row"><a class="btn pri" href="' + (r.tipo === 'quiz' ? '#/quiz?resume=1' : r.hash) + '">Continuar</a>' + (d.mat ? '<a class="btn" href="#/resumo/' + d.mat + '">Meu resumo</a>' : '') + '</div></div>';
+  }
+  function cardTempo() {
+    var tp = tempoDe(), hoje = tp.dias[today()] || 0, sem = 0; for (var i = 0; i < 7; i++) sem += tp.dias[addDays(today(), -i)] || 0;
+    return '<div class="card"><div class="row"><b>⏱ Tempo de estudo</b><span class="sp"></span><a class="small" href="#/resumo">Meu resumo</a></div><div class="grid c3" style="margin-top:.5rem"><div><div class="small mut">Hoje</div><div class="stat" style="font-size:1.3rem">' + fmtDur(hoje) + '</div></div><div><div class="small mut">Últimos 7 dias</div><div class="stat" style="font-size:1.3rem">' + fmtDur(sem) + '</div></div><div><div class="small mut">Total estudando</div><div class="stat" style="font-size:1.3rem">' + fmtDur(tp.estudo) + '</div></div></div><p class="small mut" style="margin:.4rem 0 0">O cronômetro pausa sozinho quando você sai da página, fecha o site ou fica 3 minutos parado.</p></div>';
   }
 
   /* ---------- Foco na aprovação ---------- */
@@ -480,7 +727,7 @@
     var h = '<h1>Olá, ' + esc(primeiroNome()) + '! Vamos estudar?</h1><p class="small mut" style="margin-top:-.3rem">Concurso: <b>' + esc(cc.nome) + ' (' + esc(cc.banca) + ')</b> · Nível: <b>' + esc(nvInfo().nome) + '</b> · <a href="#/' + (inscs().length > 1 ? 'nivel' : 'cadastro') + '">' + (inscs().length > 1 ? 'alternar' : 'editar cadastro') + '</a></p>';
     if (cc.prova) { var d = diasPara(cc.prova); h += '<div class="card"><div class="mut small">Prova ' + esc(cc.nome) + ' (' + esc(cc.banca) + ')</div><div class="stat">' + (d >= 0 ? d + ' dias' : 'Prova realizada') + '</div><div class="small mut">' + esc(provaTxt(cc)) + ' (confirmar no edital)</div></div>'; }
     else h += '<div class="card"><div class="mut small">Prova ' + esc(cc.nome) + ' (' + esc(cc.banca) + ')</div><div class="stat">Data a definir</div><div class="small mut">' + esc(cc.status) + ' <a target="_blank" rel="noopener" href="' + esc(cc.busca) + '">Acompanhar a banca</a>. Enquanto isso, o cronograma usa a prova da SEMED como referência.</div></div>';
-    h += cardMeta() + cardMissao();
+    h += cardRetomar() + cardTempo() + cardMeta() + cardMissao();
     h += '<div class="card"><div class="row"><b>' + esc(v.nome) + '</b></div><p class="small mut" style="margin:.3rem 0">Rotina do dia: teoria dirigida 60 min · questões 90 min · revisão ativa 30 min (resumo de 1 página + caderno de erros).</p>' + (prox ? '<a class="btn" href="#/aula/' + prox.m.id + '/' + prox.t.id + '">▶ Seguir a trilha: ' + esc(prox.t.titulo) + '</a>' : '<p>🎉 Você concluiu todos os tópicos desta volta.</p>') + '</div>';
     h += '<div class="grid c3"><div class="card"><div class="mut small">Revisões para hoje</div><div class="stat">' + due.length + '</div><a href="#/revisao">Abrir revisão</a></div>';
     h += '<div class="card"><div class="mut small">Meta da semana (' + feitosSem + '/' + S.meta + ' etapas)</div>' + bar(Math.min(100, pct(feitosSem, S.meta))) + '<div class="small mut" style="margin-top:.4rem">Ajuste em Ajustes.</div></div>';
@@ -505,8 +752,9 @@
   }
   function vMateria(id) {
     var m = mat(id); if (!m) return go('#/trilha');
+    S.retomar = { tipo: 'materia', m: id, hash: '#/materia/' + id, ts: Date.now() }; save();
     var h = '<p><a href="#/trilha">← Trilha</a></p><h1>' + esc(m.nome) + '</h1><p class="mut">' + esc(m.banca) + '</p>';
-    h += '<div class="row noprint" style="margin-bottom:.6rem"><a class="btn sm" href="pdf/apostila-' + S.nivel + '-' + m.id + '.pdf" target="_blank" rel="noopener">⬇ Apostila em PDF</a><a class="btn sm" href="#/quiz?m=' + m.id + '&n=10">✏️ Praticar 10 questões</a></div><div class="card list">';
+    h += '<div class="row noprint" style="margin-bottom:.6rem"><a class="btn sm" href="pdf/apostila-' + S.nivel + '-' + m.id + '.pdf" target="_blank" rel="noopener">⬇ Apostila em PDF</a><a class="btn sm" href="#/resumo/' + m.id + '">📚 Meu resumo</a><a class="btn sm" href="#/quiz?m=' + m.id + '&n=10">✏️ Praticar 10 questões</a></div><div class="card list">';
     topsOf(m).forEach(function (t) {
       var d = [1, 2, 3].map(function (v) { return topicDone(m.id, t.id, v) ? '●' : '○'; }).join(' ');
       h += '<a class="item" href="#/aula/' + m.id + '/' + t.id + '"><span class="dot" style="background:' + m.cor + '"></span><span style="flex:1"><b>' + esc(t.titulo) + '</b><br><span class="small mut">' + qsOf(m.id, t.id).length + ' questões' + (t.provavel ? ' · provável' : '') + '</span></span><span title="Voltas 1, 2 e 3" class="small mut">' + d + '</span></a>';
@@ -518,14 +766,15 @@
   function ytUrl(q) { return 'https://www.youtube.com/results?search_query=' + encodeURIComponent(q + ' aula'); }
   function gUrl(q) { return 'https://www.google.com/search?q=' + encodeURIComponent(q + ' resumo filetype:pdf'); }
   function gUrl2(q) { return 'https://www.google.com/search?q=' + encodeURIComponent(q); }
-  function vAula(mid, tid) {
+  function vAula(mid, tid, aba) {
     var m = mat(mid), t = topico(mid, tid); if (!t) return go('#/trilha');
     var k = tkey(mid, tid), tl = topsOf(m), idx = tl.indexOf(t), nxt = tl[idx + 1], prv = tl[idx - 1];
-    var links = S.links[k] || [];
+    var links = S.links[k] || [], ab = [0, 1, 2].indexOf(+aba) >= 0 ? +aba : 0;
+    marcaVisto(mid, tid, ab);
     var h = '<p class="noprint"><a href="#/materia/' + mid + '">← ' + esc(m.nome) + '</a></p><div class="lesson"><h1>' + esc(t.titulo) + '</h1>';
     h += '<div class="row noprint">' + (t.provavel ? '<span class="pill warn">conteúdo provável · confirmar no edital</span>' : '') + '</div>';
-    h += '<div class="tabs noprint" role="tablist"><button class="tab on" data-l="0">1 · Contexto</button><button class="tab" data-l="1">2 · Básico</button><button class="tab" data-l="2">3 · Aprofundado</button></div>';
-    h += '<div class="card"><div class="lvl on" data-l="0"><h3 class="print-only">1 · Contexto</h3>' + t.contexto + '</div><div class="lvl" data-l="1"><h3 class="print-only">2 · Básico</h3>' + t.basico + '</div><div class="lvl" data-l="2"><h3 class="print-only">3 · Aprofundado</h3>' + t.aprofundado + '</div></div></div>';
+    h += '<div class="tabs noprint" role="tablist"><button class="tab' + (ab === 0 ? ' on' : '') + '" data-l="0">1 · Contexto</button><button class="tab' + (ab === 1 ? ' on' : '') + '" data-l="1">2 · Básico</button><button class="tab' + (ab === 2 ? ' on' : '') + '" data-l="2">3 · Aprofundado</button></div>';
+    h += '<div class="card"><div class="lvl' + (ab === 0 ? ' on' : '') + '" data-l="0"><h3 class="print-only">1 · Contexto</h3>' + t.contexto + '</div><div class="lvl' + (ab === 1 ? ' on' : '') + '" data-l="1"><h3 class="print-only">2 · Básico</h3>' + t.basico + '</div><div class="lvl' + (ab === 2 ? ' on' : '') + '" data-l="2"><h3 class="print-only">3 · Aprofundado</h3>' + t.aprofundado + '</div></div></div>';
     h += '<div class="card noprint"><h3 style="margin-top:0">Material de apoio</h3><p class="small mut">Busque aulas e resumos já prontos ou baixe a apostila gerada para este edital.</p><div class="row">' +
       '<a class="btn sm" target="_blank" rel="noopener" href="' + ytUrl(t.busca) + '">▶ Videoaulas no YouTube</a>' +
       '<a class="btn sm" target="_blank" rel="noopener" href="' + gUrl(t.busca) + '">📄 PDFs resumidos (Google)</a>' +
@@ -541,11 +790,11 @@
     $app.innerHTML = h;
 
     Array.prototype.forEach.call($app.querySelectorAll('.tab'), function (b) {
-      b.onclick = function () { var l = b.getAttribute('data-l'); Array.prototype.forEach.call($app.querySelectorAll('.tab,.lvl'), function (e) { e.classList.toggle('on', e.getAttribute('data-l') === l); }); };
+      b.onclick = function () { var l = b.getAttribute('data-l'); Array.prototype.forEach.call($app.querySelectorAll('.tab,.lvl'), function (e) { e.classList.toggle('on', e.getAttribute('data-l') === l); }); marcaVisto(mid, tid, +l); };
     });
     document.getElementById('b-print').onclick = function () { window.print(); };
     document.getElementById('nota').onchange = function (e) { S.notas[k] = e.target.value; save(); toast('Anotação salva'); };
-    Array.prototype.forEach.call($app.querySelectorAll('[data-v]'), function (b) { b.onclick = function () { markDone(mid, tid, +b.getAttribute('data-v')); toast('Etapa concluída! Revisões agendadas.'); vAula(mid, tid); }; });
+    Array.prototype.forEach.call($app.querySelectorAll('[data-v]'), function (b) { b.onclick = function () { markDone(mid, tid, +b.getAttribute('data-v')); toast('Etapa concluída! Revisões agendadas.'); vAula(mid, tid, S.retomar && S.retomar.aba); verConclusaoMateria(mid); }; });
     document.getElementById('lk-add').onclick = function () {
       var u = document.getElementById('lk-u').value.trim(), tt = document.getElementById('lk-t').value.trim() || u;
       if (!/^https?:\/\//i.test(u)) { toast('Use um endereço que comece com http:// ou https://'); return; }
@@ -586,15 +835,17 @@
     if (q.f === 'erradas') list = list.filter(function (x) { return S.erros[x.id] && !S.erros[x.id].res; });
     if (q.foco) list = listaFoco(+q.n || 10);
     if (q.ids) list = q.ids.split(',').map(qById).filter(Boolean);
+    if (q.resume && S.quizAtual) { var qa = S.quizAtual; var lr = qa.ids.map(qById).filter(Boolean); if (lr.length) return runQuiz(lr, q, { i: Math.min(qa.i, lr.length - 1), acertos: qa.acertos, errados: qa.errados || [] }); }
     list = shuffle(list).slice(0, +q.n || 10);
     if (!list.length) { $app.innerHTML = '<div class="card"><p>Nenhuma questão encontrada com esse filtro.</p><a class="btn" href="#/praticar">Voltar</a></div>'; return; }
     runQuiz(list, q);
   }
-  function runQuiz(list, q) {
-    var i = 0, acertos = 0, errados = [];
+  function runQuiz(list, q, est) {
+    var i = est ? est.i : 0, acertos = est ? est.acertos : 0, errados = est ? est.errados.slice() : [];
+    function lembra() { S.quizAtual = { ids: list.map(function (x) { return x.id; }), i: i, acertos: acertos, errados: errados }; S.retomar = { tipo: 'quiz', hash: '#/quiz?resume=1', ts: Date.now() }; save(); }
     function show() {
       if (i >= list.length) return fim();
-      var qu = list[i], m = mat(qu.m), t = topico(qu.m, qu.t);
+      var qu = list[i], m = mat(qu.m), t = topico(qu.m, qu.t); T.m = qu.m; T.t = qu.t; lembra();
       var h = '<div class="row"><span class="small mut">Questão ' + (i + 1) + ' de ' + list.length + ' · ' + esc(m.nome) + ' · ' + esc(t.titulo) + '</span></div>' + bar(pct(i, list.length)) +
         '<div class="card"><p class="q-enun">' + esc(qu.q) + '</p><div id="opts">' + qu.a.map(function (a, k) { return '<button class="opt" data-k="' + k + '"><span class="l">' + LET[k] + '</span><span>' + esc(a) + '</span></button>'; }).join('') + '</div><div id="fb"></div></div>';
       $app.innerHTML = h;
@@ -603,6 +854,7 @@
     function resp(k) {
       var qu = list[i], ok = k === qu.g; record(qu, ok, k); save();
       if (ok) acertos++; else errados.push(qu.id);
+      i++; lembra(); i--;
       Array.prototype.forEach.call($app.querySelectorAll('.opt'), function (b) {
         var n = +b.getAttribute('data-k'); b.disabled = true; if (n === qu.g) b.classList.add('right'); else if (n === k) b.classList.add('wrong');
       });
@@ -615,7 +867,7 @@
       document.getElementById('nx').onclick = function () { i++; show(); };
     }
     function fim() {
-      var p = pct(acertos, list.length);
+      var p = pct(acertos, list.length); S.quizAtual = null; S.retomar = list[0] ? { tipo: 'materia', m: list[0].m, hash: '#/materia/' + list[0].m, ts: Date.now() } : null; save();
       $app.innerHTML = '<div class="card"><h1>Resultado</h1><div class="stat">' + acertos + ' / ' + list.length + ' (' + p + '%)</div>' + bar(p) +
         '<p>' + (p >= 80 ? 'Muito bem! Pode avançar.' : p >= 50 ? 'Bom caminho. Revise as explicações dos erros.' : 'Releia o resumo do tópico e tente de novo.') + '</p>' +
         '<div class="row">' + (errados.length ? '<a class="btn pri" href="#/quiz?ids=' + errados.join(',') + '&n=99">Refazer erradas</a>' : '') + '<a class="btn" href="#/erros">Caderno de erros</a><a class="btn" href="#/praticar">Mais questões</a></div></div>';
@@ -647,7 +899,7 @@
         var n = Math.round(dq[m] * factor);
         ids = ids.concat(shuffle(qsOf(m)).slice(0, n).map(function (x) { return x.id; }));
       });
-      saveSim({ ids: ids, resp: {}, marc: {}, i: 0, ini: Date.now(), dur: dur, fim: null });
+      saveSim({ ids: ids, resp: {}, marc: {}, i: 0, ini: Date.now(), dec: 0, dur: dur, fim: null });
       go('#/simulado');
     }
     document.getElementById('sim-full').onclick = function () { start(1, mins * 60); };
@@ -657,7 +909,10 @@
   function fmt(sec) { sec = Math.max(0, sec); var h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = sec % 60; return pad(h) + ':' + pad(m) + ':' + pad(s); }
   function vSimRun() {
     var s = loadSim(); if (!s) return go('#/simulados');
-    function left() { return s.dur - Math.floor((Date.now() - s.ini) / 1000); }
+    if (s.dec == null) s.dec = Math.floor((Date.now() - s.ini) / 1000);
+    T.sim = s; /* o tempo do simulado só corre com a página ativa */
+    S.retomar = { tipo: 'simulado', hash: '#/simulado', ts: Date.now() }; save();
+    function left() { return s.dur - Math.floor(s.dec); }
     function draw() {
       var qu = qById(s.ids[s.i]), m = mat(qu.m);
       var h = '<div class="row"><span class="timer" id="tm">' + fmt(left()) + '</span><span class="sp"></span><button class="btn sm pri" id="fin">Finalizar</button></div>';
@@ -689,7 +944,8 @@
       if (r != null) record(q, ok, r); /* em branco: conta como não acertada, sem entrar no caderno */
       if (ok) acertos++;
     });
-    var gasto = Math.min(s.dur, Math.floor((Date.now() - s.ini) / 1000));
+    T.sim = null; S.retomar = null;
+    var gasto = Math.min(s.dur, Math.round(s.dec != null ? s.dec : (Date.now() - s.ini) / 1000));
     var e = { dia: today(), total: s.ids.length, acertos: acertos, gasto: gasto, dur: s.dur, ids: s.ids.slice(), resp: s.resp, c: S.concurso, n: S.nivel };
     S.sims.push(e); save();
     saveSim(null);
@@ -745,7 +1001,7 @@
     h += '<p><a class="btn pri" href="#/erros">Ver caderno de erros</a> <a class="btn" href="#/simulados">Novo simulado</a></p>';
     $app.innerHTML = h; window.scrollTo(0, 0);
     var ag = document.getElementById('sr-again');
-    if (ag) ag.onclick = function () { saveSim({ ids: e.ids.slice(), resp: {}, marc: {}, i: 0, ini: Date.now(), dur: e.dur, fim: null }); go('#/simulado'); };
+    if (ag) ag.onclick = function () { saveSim({ ids: e.ids.slice(), resp: {}, marc: {}, i: 0, ini: Date.now(), dec: 0, dur: e.dur, fim: null }); go('#/simulado'); };
   }
 
   /* ---------- Caderno de erros ---------- */
@@ -830,7 +1086,7 @@
 
   /* ---------- Mais / Config ---------- */
   function vMais() {
-    $app.innerHTML = '<h1>Mais</h1><div class="card list">' + [['#/erros', '📓 Caderno de erros'], ['#/revisao', '🔁 Revisão espaçada'], ['#/cronograma', '📅 Cronograma'], ['#/edital', '📄 Edital e regras da prova'], ['#/conta', '👤 Minha conta e sair'], ['#/config', '⚙️ Ajustes e backup']].map(function (x) { return '<a class="item" href="' + x[0] + '">' + x[1] + '</a>'; }).join('') + '</div>';
+    $app.innerHTML = '<h1>Mais</h1><div class="card list">' + [['#/erros', '📓 Caderno de erros'], ['#/revisao', '🔁 Revisão espaçada'], ['#/cronograma', '📅 Cronograma'], ['#/resumo', '📚 Resumo do que estudei'], ['#/edital', '📄 Edital e regras da prova'], ['#/conta', '👤 Minha conta e sair']].concat(ehDono() ? [['#/dono', '🛡️ Área do dono']] : []).concat([ ['#/config', '⚙️ Ajustes e backup']]).map(function (x) { return '<a class="item" href="' + x[0] + '">' + x[1] + '</a>'; }).join('') + '</div>';
   }
   function vConfig() {
     $app.innerHTML = '<h1>Ajustes</h1><div class="card"><h3 style="margin-top:0">Meu cadastro</h3><p class="small mut" style="margin:0 0 .4rem">Conta: ' + esc(mostraLogin((usuarioAtual() || {}).login || '')) + ' · <a href="#/conta">Minha conta / sair</a></p><p class="small">' + esc(S.perfil.nome) + ' · ' + inscs().map(rotulo).map(esc).join(', ') + '</p><label for="nv">Estou estudando para</label><select id="nv">' + inscs().map(function (i, k) { return '<option value="' + k + '"' + (i.c === S.concurso && i.n === S.nivel ? ' selected' : '') + '>' + esc(rotulo(i)) + '</option>'; }).join('') + '</select><p class="small mut">Muda os tópicos, questões, simulado e apostilas. Seu progresso é mantido.</p><a class="btn sm" href="#/cadastro">✎ Editar cadastro / adicionar nível</a></div><div class="card"><h3 style="margin-top:0">Minha meta</h3><label for="mn">Meta de acertos na prova (%) - a nota mínima é 50%</label><input type="number" id="mn" min="50" max="100" value="' + metaNota() + '"><label for="mq">Questões por dia</label><input type="number" id="mq" min="5" max="200" value="' + (S.metaq || 30) + '"></div><div class="card"><label for="meta">Meta semanal (etapas concluídas por semana)</label><input type="number" id="meta" min="1" max="40" value="' + S.meta + '"></div>' +
@@ -860,7 +1116,9 @@
     navigator.serviceWorker.addEventListener('controllerchange', function () { if (tinhaSW && !recarregou) { recarregou = true; location.reload(); } });
     navigator.serviceWorker.register('sw.js').then(function (r) { return r.update(); }).catch(function () { });
   }
-  (function () { var sid = sessaoId(); if (sid && usuarios().some(function (u) { return u.id === sid; })) { UID = sid; carregar(); applyTheme(); } })();
+  migraDono();
+  (function () { var sid = sessaoId(); if (sid && usuarios().some(function (u) { return u.id === sid; })) { UID = sid; carregar(); guardaRetomar(); applyTheme(); iniciaVisita(); } })();
   route();
   confirmarNivel();
+  if (!document.querySelector('.modal')) oferecerRetomar();
 })();

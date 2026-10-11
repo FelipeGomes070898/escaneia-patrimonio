@@ -13,6 +13,16 @@ Ao abrir o site, a pessoa **cria uma conta** (nome, senha e um login à escolha:
 > **Limite importante:** as contas ficam salvas **só no navegador do aparelho** (não há servidor). A mesma pessoa em outro celular/computador precisa criar outra conta (ou usar *Ajustes → Exportar/Importar*). A senha é guardada com hash (PBKDF2-SHA256 com sal), mas serve para separar usuários, não para proteger dados sensíveis, e não há recuperação de senha. Para login que acompanha a pessoa entre aparelhos é preciso um serviço de servidor (ex.: Firebase ou Supabase).
 > Quem já usava o site antes: o progresso é adotado pela **primeira conta criada** no aparelho.
 
+## Tempo de estudo, retomar e resumo
+- **Cronômetro de estudo** (pílula no canto da tela): só conta com a página visível, com foco e com atividade. **Pausa na hora** ao sair da página, trocar de app, fechar o site ou ficar **3 minutos parado**. O tempo é guardado por dia, matéria e tópico. O tempo do **simulado** também fica parado nessas situações.
+- **Continuar de onde parou:** o site lembra a aula (e a aba), as questões respondidas e o simulado em andamento. Ao entrar de novo, uma janela mostra o que a pessoa estava estudando, **o que ela já estudou até ali** (resumo pessoal: tópicos vistos, pontos principais, anotações, ponto de atenção e tempo) e deixa **continuar** de onde parou, **recomeçar a matéria** ou ir ao painel.
+- **Resumo do que estudei** (menu Mais): por matéria, com o contexto para lembrar, o conteúdo de cada tópico visto, anotações e erros com a regra correta. Ao terminar a matéria aparece o aviso para ver o resumo completo.
+
+## Área do dono
+Em *Mais → Área do dono* (só aparece para a **primeira conta criada no aparelho**): lista as contas **deste aparelho** com status online, última entrada, tempo estudando (hoje, 7 dias, total), progresso, acertos, simulados e onde cada uma parou; cada usuário tem uma tela de detalhes com gráfico de 14 dias, tempo por matéria e tópico e últimas visitas.
+
+> **Limite importante:** o site não tem servidor. Cada conta existe só no navegador do aparelho onde foi criada, então o dono **não vê pessoas que usam outros celulares ou computadores**, e o "dono" de cada aparelho é só uma convenção local (não é segurança). Para o dono enxergar todos os usuários de qualquer aparelho, é preciso ligar um serviço de servidor (por exemplo Firebase Authentication + Firestore): as contas e os resumos de atividade (já calculados pelo app) passariam a ser gravados lá, e a Área do dono leria de lá.
+
 ## Cadastro: concurso e nível
 Antes de entrar, a pessoa se **cadastra**: nome, o(s) **concurso(s)** em que se inscreveu (**SEMED, SEMUSA, IPAM ou SESAU-RO**) e, dentro de cada um, o **nível que pagou** (fundamental, médio e/ou superior, conforme os níveis de cada concurso). Cada par concurso + nível é uma inscrição; quem tem mais de uma escolhe qual estudar ao entrar e alterna pelo concurso no topo da tela. Banca, data da prova e estrutura mudam conforme a inscrição ativa. Tópicos, questões, simulado e apostilas seguem o nível. O cadastro (em *Ajustes → Meu cadastro*) pode ser editado sem perder o progresso.
 
