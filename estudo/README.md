@@ -20,8 +20,13 @@ Ao abrir o site, a pessoa **cria uma conta** (nome, senha e um login à escolha:
 - **Continuar de onde parou:** o site lembra a aula (e a aba), as questões respondidas e o simulado em andamento. Ao entrar de novo, uma janela mostra o que a pessoa estava estudando, **o que ela já estudou até ali** (resumo pessoal: tópicos vistos, pontos principais, anotações, ponto de atenção e tempo) e deixa **continuar** de onde parou, **recomeçar a matéria** ou ir ao painel.
 - **Resumo do que estudei** (menu Mais): por matéria, com o contexto para lembrar, o conteúdo de cada tópico visto, anotações e erros com a regra correta. Ao terminar a matéria aparece o aviso para ver o resumo completo.
 
-## Área do dono
-Fica **escondida para todos**: não há botão nem link no site. Só abre quem digita o **código do dono** em `#/dono` (endereço do site + `#/dono`). O repositório guarda apenas o **hash** do código (`data/admin-config.js`), nunca o código. Depois de digitar o código certo, a área fica liberada **naquela conta, naquele aparelho** (aparece em *Mais → Área do dono*) até ser bloqueada de novo. A exportação de conta não leva essa liberação.
+## Área do dono, funções e permissões
+Três funções: **Dono**, **Colaborador** e **Aluno** (padrão).
+- **Dono:** só as contas cujo login é um dos e-mails autorizados (`data/admin-config.js`; os e-mails ficam apenas como **hash**, não em texto). Como o e-mail do login não é verificado, o dono também digita o **código secreto** (também só como hash) em `#/dono` na primeira vez em cada aparelho.
+- **Colaborador:** liberado pelo dono; abre a área do dono sem o código, mas não gerencia pessoas.
+- **Aluno:** estuda normalmente e não vê nada disso (quem abre `#/dono` só lê "restrita ao dono").
+
+O dono, dentro da área, **adiciona pessoas** (cria conta com nome, login e senha inicial), define quem é aluno ou colaborador e remove contas. Quem quiser mudar o login para um e-mail (por exemplo para virar dono) usa *Minha conta → Alterar login*.
 
 Mostra as contas **deste aparelho**: online, última entrada, tempo estudando (hoje, 7 dias, total), progresso, acertos, simulados e onde cada uma parou, com detalhes por usuário (gráfico de 14 dias, tempo por matéria e tópico, últimas visitas).
 
