@@ -81,7 +81,7 @@
   function iniciaSessao(id, lembrar) {
     try { sessionStorage.setItem('estudo.sessao', id); sessionStorage.removeItem('estudo.nvok'); sessionStorage.removeItem('estudo.retomado'); } catch (e) { }
     if (lembrar) lsSet('estudo.sessao', id); else lsDel('estudo.sessao');
-    UID = id; nivelConfirmado = false; carregar(); guardaRetomar(); applyTheme(); iniciaVisita();
+    UID = id; nivelConfirmado = false; carregar(); guardaRetomar(); applyTheme(); iniciaVisita(); desenhaPill();
   }
   /* cópia de "onde parou" da visita anterior: a visita atual vai sobrescrever S.retomar */
   var retomarAnterior = null;
@@ -131,7 +131,7 @@
   var T = { ativo: false, input: Date.now(), tick: Date.now(), n: 0, m: null, t: null, estudo: false, sim: null, sess: null, motivo: '' };
   var ESTUDO_ROTAS = ['aula', 'materia', 'quiz', 'simulado', 'simrev', 'erros', 'revisao', 'resumo', 'praticar', 'trilha'];
   function idleMax() { return (window.ESTUDO_IDLE || 180) * 1000; } /* parado por 3 min = pausa */
-  function tempoDe() { S.tempo = S.tempo || { site: 0, estudo: 0, dias: {}, mats: {}, topicos: {}, sessoes: [] }; return S.tempo; }
+  function tempoDe() { S.tempo = S.tempo || { site: 0, estudo: 0, dias: {}, diasEst: {}, mats: {}, topicos: {}, sessoes: [] }; if (!S.tempo.diasEst) S.tempo.diasEst = Object.assign({}, S.tempo.dias); /* versão antiga: dias só tinha estudo */ return S.tempo; }
   function atividade() { S.atividade = S.atividade || { entradas: 0, ultima: 0, ping: 0 }; return S.atividade; }
   function motivoPausa() {
     if (!UID || !S.perfil) return 'sem login';
@@ -156,9 +156,9 @@
     if (UID && S.perfil) {
       atividade().ping = now;
       if (at) {
-        var tp = tempoDe(); tp.site += d;
-        if (T.estudo) {
-          tp.estudo += d; var dia = today(); tp.dias[dia] = (tp.dias[dia] || 0) + d;
+        var tp = tempoDe(), dia = today(); tp.site += d; tp.dias[dia] = (tp.dias[dia] || 0) + d; /* todo tempo ativo no site */
+        if (T.estudo) { /* aulas, questões, simulados, resumo...: conta como estudo */
+          tp.estudo += d; tp.diasEst[dia] = (tp.diasEst[dia] || 0) + d;
           if (T.m) tp.mats[T.m] = (tp.mats[T.m] || 0) + d;
           if (T.m && T.t) { var k = T.m + '/' + T.t; tp.topicos[k] = (tp.topicos[k] || 0) + d; }
           if (T.sess) T.sess.seg += d;
@@ -178,11 +178,17 @@
   function fmtDur(sec) { sec = Math.round(sec || 0); if (sec < 60) return sec + ' s'; var h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60); return h ? h + ' h ' + pad(m) + ' min' : m + ' min'; }
   function desenhaPill() {
     var el = document.getElementById('tpill');
-    if (!el) { el = document.createElement('div'); el.id = 'tpill'; el.setAttribute('role', 'status'); document.body.appendChild(el); }
+    if (!el) {
+      el = document.createElement('button'); el.id = 'tpill'; el.type = 'button'; el.setAttribute('aria-live', 'off');
+      var top = document.querySelector('.topbar'), chip = document.getElementById('nvchip'); if (top) top.insertBefore(el, chip || null); else document.body.appendChild(el);
+      el.onclick = function () { toast(T.ativo ? 'Cronômetro contando: tempo ativo de hoje no site.' : 'Cronômetro pausado: ' + T.motivo + '.'); };
+    }
     var ver = !!UID && !!S.perfil; el.hidden = !ver; if (!ver) return;
     el.className = 'tpill ' + (T.ativo ? 'on' : 'off');
-    el.innerHTML = '<span class="tp-d"></span><span class="tp-t">' + fmtH(tempoDe().dias[today()] || 0) + '</span><span class="tp-s">' + (T.ativo ? (T.estudo ? 'estudando hoje' : 'hoje') : 'pausado') + '</span>';
-    el.title = T.ativo ? 'Tempo de estudo de hoje. Pausa sozinho se você sair da página ou ficar parado por 3 minutos.' : 'Cronômetro pausado: ' + T.motivo;
+    el.innerHTML = '<span class="tp-d"></span><span class="tp-t">' + fmtH(tempoDe().dias[today()] || 0) + '</span>';
+    el.title = T.ativo ? 'Tempo ativo de hoje no site. Pausa sozinho se você sair da página ou ficar parado por 3 minutos.' : 'Cronômetro pausado: ' + T.motivo;
+    var a1 = document.getElementById('tt-hoje'); if (a1) { var tq = tempoDe(); a1.textContent = fmtDur(tq.dias[today()] || 0); document.getElementById('tt-est').textContent = fmtDur(tq.diasEst[today()] || 0); document.getElementById('tt-tot').textContent = fmtDur(tq.estudo); }
+    el.setAttribute('aria-label', (T.ativo ? 'Tempo de hoje: ' : 'Pausado. Tempo de hoje: ') + fmtDur(tempoDe().dias[today()] || 0));
   }
   setInterval(tempoTick, 1000);
 
@@ -371,13 +377,13 @@
   function resumoUsuario(u) {
     var d = dadosDe(u.id), a = d.atividade || { entradas: 0, ultima: 0, ping: 0 }, tp = d.tempo || { site: 0, estudo: 0, dias: {}, mats: {}, topicos: {}, sessoes: [] };
     var online = u.id === UID ? T.ativo : (Date.now() - (a.ping || 0) < 45000);
-    var hoje = (tp.dias || {})[today()] || 0, sem = 0; for (var i = 0; i < 7; i++) sem += (tp.dias || {})[addDays(today(), -i)] || 0;
+    var de = tp.diasEst || tp.dias || {}, hoje = de[today()] || 0, noSiteHoje = (tp.dias || {})[today()] || 0, sem = 0; for (var i = 0; i < 7; i++) sem += de[addDays(today(), -i)] || 0;
     var tries = 0, hits = 0; Object.keys(d.answers || {}).forEach(function (id) { tries += d.answers[id].tries; hits += d.answers[id].hits; });
     var feitos = Object.keys(d.done || {}).filter(function (k) { return d.done[k] && d.done[k].v1; }).length;
     var sims = d.sims || [], media = sims.length ? Math.round(sims.reduce(function (x, y) { return x + pct(y.acertos, y.total); }, 0) / sims.length) : null;
     var abertos = Object.keys(d.erros || {}).filter(function (id) { return !d.erros[id].res; }).length;
     var onde = ''; if (d.retomar) { var r = d.retomar, mm = r.m && mat(r.m), tt = r.m && r.t && topico(r.m, r.t); onde = r.tipo === 'aula' && mm && tt ? mm.nome + ' · ' + tt.titulo : r.tipo === 'quiz' ? 'fazendo questões' : r.tipo === 'simulado' ? 'em um simulado' : mm ? mm.nome : ''; }
-    return { u: u, d: d, a: a, tp: tp, online: online, hoje: hoje, sem: sem, tries: tries, hits: hits, acc: pct(hits, tries), feitos: feitos, sims: sims, media: media, abertos: abertos, onde: onde, insc: ((d.perfil && d.perfil.insc) || []).map(rotulo) };
+    return { u: u, d: d, a: a, tp: tp, online: online, hoje: hoje, noSiteHoje: noSiteHoje, sem: sem, tries: tries, hits: hits, acc: pct(hits, tries), feitos: feitos, sims: sims, media: media, abertos: abertos, onde: onde, insc: ((d.perfil && d.perfil.insc) || []).map(rotulo) };
   }
   function pillOn(r) { return r.online ? '<span class="pill ok">🟢 online agora</span>' : '<span class="pill">⚪ ' + (r.a.ping ? 'visto ' + ha(r.a.ping) : 'nunca entrou') + '</span>'; }
   function vDono() {
@@ -400,9 +406,9 @@
     if (!ehDono()) return go('#/');
     var u = usuarios().filter(function (x) { return x.id === id; })[0]; if (!u) return go('#/dono');
     var r = resumoUsuario(u), tp = r.tp, h = '<p><a href="#/dono">← Área do dono</a></p><h1>' + esc(u.nome) + '</h1><div class="row">' + pillOn(r) + '<span class="small mut">' + esc(TIPOS[tipoDoLogin(u.login)].nome.toLowerCase() + ': ' + mostraLogin(u.login)) + ' · conta criada em ' + brDate(iso(new Date(u.criado))) + '</span></div>';
-    h += '<div class="grid c3" style="margin-top:.6rem"><div class="card"><div class="small mut">Última entrada</div><div class="stat" style="font-size:1.2rem">' + fmtDT(r.a.ultima) + '</div><div class="small mut">' + r.a.entradas + ' entrada(s)</div></div><div class="card"><div class="small mut">Tempo estudando (hoje / 7 dias)</div><div class="stat" style="font-size:1.2rem">' + fmtDur(r.hoje) + ' / ' + fmtDur(r.sem) + '</div><div class="small mut">total ' + fmtDur(tp.estudo) + '</div></div><div class="card"><div class="small mut">Tempo no site (total)</div><div class="stat" style="font-size:1.2rem">' + fmtDur(tp.site) + '</div><div class="small mut">inclui telas fora do estudo</div></div></div>';
+    h += '<div class="grid c3" style="margin-top:.6rem"><div class="card"><div class="small mut">Última entrada</div><div class="stat" style="font-size:1.2rem">' + fmtDT(r.a.ultima) + '</div><div class="small mut">' + r.a.entradas + ' entrada(s)</div></div><div class="card"><div class="small mut">Estudando (hoje / 7 dias)</div><div class="stat" style="font-size:1.2rem">' + fmtDur(r.hoje) + ' / ' + fmtDur(r.sem) + '</div><div class="small mut">total ' + fmtDur(tp.estudo) + '</div></div><div class="card"><div class="small mut">Tempo no site (total)</div><div class="stat" style="font-size:1.2rem">' + fmtDur(tp.site) + '</div><div class="small mut">hoje no site: ' + fmtDur(r.noSiteHoje) + ' · inclui telas fora do estudo</div></div></div>';
     if (r.onde) h += '<div class="card"><b>Onde parou:</b> ' + esc(r.onde) + (r.d.retomar ? ' · ' + ha(r.d.retomar.ts) : '') + '</div>';
-    var dias = [], max = 1; for (var i = 13; i >= 0; i--) { var dd = addDays(today(), -i), sec = (tp.dias || {})[dd] || 0; dias.push({ dd: dd, sec: sec }); if (sec > max) max = sec; }
+    var dias = [], max = 1; for (var i = 13; i >= 0; i--) { var dd = addDays(today(), -i), sec = (tp.diasEst || tp.dias || {})[dd] || 0; dias.push({ dd: dd, sec: sec }); if (sec > max) max = sec; }
     h += '<h2>Tempo de estudo por dia (14 dias)</h2><div class="card"><div class="dbars">' + dias.map(function (x) { return '<div class="db" title="' + brDate(x.dd) + ': ' + fmtDur(x.sec) + '"><i style="height:' + Math.max(3, Math.round(100 * x.sec / max)) + '%"></i><span>' + x.dd.slice(8) + '</span></div>'; }).join('') + '</div><div class="small mut">Maior dia: ' + fmtDur(max === 1 ? 0 : max) + '</div></div>';
     h += '<h2>Por matéria</h2><div class="card">' + C.materias.map(function (m) {
       var seg = (tp.mats || {})[m.id] || 0, a = { t: 0, h: 0 }; Object.keys(r.d.answers || {}).forEach(function (qid) { var q = qById(qid); if (q && q.m === m.id) { a.t += r.d.answers[qid].tries; a.h += r.d.answers[qid].hits; } });
@@ -639,8 +645,8 @@
     return '<div class="card" style="border-left:6px solid var(--ok)"><div class="row"><b>▶ Continuar de onde parei</b><span class="sp"></span><span class="small mut">' + ha(r.ts) + '</span></div><p style="margin:.3rem 0"><b>' + esc(d.titulo) + '</b><br><span class="small mut">Você estava ' + esc(d.onde) + '.</span></p><div class="row"><a class="btn pri" href="' + (r.tipo === 'quiz' ? '#/quiz?resume=1' : r.hash) + '">Continuar</a>' + (d.mat ? '<a class="btn" href="#/resumo/' + d.mat + '">Meu resumo</a>' : '') + '</div></div>';
   }
   function cardTempo() {
-    var tp = tempoDe(), hoje = tp.dias[today()] || 0, sem = 0; for (var i = 0; i < 7; i++) sem += tp.dias[addDays(today(), -i)] || 0;
-    return '<div class="card"><div class="row"><b>⏱ Tempo de estudo</b><span class="sp"></span><a class="small" href="#/resumo">Meu resumo</a></div><div class="grid c3" style="margin-top:.5rem"><div><div class="small mut">Hoje</div><div class="stat" style="font-size:1.3rem">' + fmtDur(hoje) + '</div></div><div><div class="small mut">Últimos 7 dias</div><div class="stat" style="font-size:1.3rem">' + fmtDur(sem) + '</div></div><div><div class="small mut">Total estudando</div><div class="stat" style="font-size:1.3rem">' + fmtDur(tp.estudo) + '</div></div></div><p class="small mut" style="margin:.4rem 0 0">O cronômetro pausa sozinho quando você sai da página, fecha o site ou fica 3 minutos parado.</p></div>';
+    var tp = tempoDe(), hoje = tp.dias[today()] || 0, est = tp.diasEst[today()] || 0;
+    return '<div class="card"><div class="row"><b>⏱ Tempo de estudo</b><span class="sp"></span><a class="small" href="#/resumo">Meu resumo</a></div><div class="grid c3" style="margin-top:.5rem"><div><div class="small mut">Hoje no site</div><div class="stat" id="tt-hoje" style="font-size:1.3rem">' + fmtDur(hoje) + '</div></div><div><div class="small mut">Estudando hoje</div><div class="stat" id="tt-est" style="font-size:1.3rem">' + fmtDur(est) + '</div></div><div><div class="small mut">Total estudando</div><div class="stat" id="tt-tot" style="font-size:1.3rem">' + fmtDur(tp.estudo) + '</div></div></div><p class="small mut" style="margin:.4rem 0 0">"Estudando" soma aulas, questões, simulados e revisões. O cronômetro (no topo) pausa sozinho quando você sai da página, fecha o site ou fica 3 minutos parado.</p></div>';
   }
 
   /* ---------- Foco na aprovação ---------- */
@@ -1117,7 +1123,7 @@
     navigator.serviceWorker.register('sw.js').then(function (r) { return r.update(); }).catch(function () { });
   }
   migraDono();
-  (function () { var sid = sessaoId(); if (sid && usuarios().some(function (u) { return u.id === sid; })) { UID = sid; carregar(); guardaRetomar(); applyTheme(); iniciaVisita(); } })();
+  (function () { var sid = sessaoId(); if (sid && usuarios().some(function (u) { return u.id === sid; })) { UID = sid; carregar(); guardaRetomar(); applyTheme(); iniciaVisita(); } desenhaPill(); })();
   route();
   confirmarNivel();
   if (!document.querySelector('.modal')) oferecerRetomar();

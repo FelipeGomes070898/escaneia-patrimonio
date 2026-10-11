@@ -14,7 +14,7 @@ Ao abrir o site, a pessoa **cria uma conta** (nome, senha e um login à escolha:
 > Quem já usava o site antes: o progresso é adotado pela **primeira conta criada** no aparelho.
 
 ## Tempo de estudo, retomar e resumo
-- **Cronômetro de estudo** (pílula no canto da tela): só conta com a página visível, com foco e com atividade. **Pausa na hora** ao sair da página, trocar de app, fechar o site ou ficar **3 minutos parado**. O tempo é guardado por dia, matéria e tópico. O tempo do **simulado** também fica parado nessas situações.
+- **Cronômetro** (discreto, no cabeçalho): conta todo o tempo ativo no site e só conta com a página visível, com foco e com atividade. **Pausa na hora** ao sair da página, trocar de app, fechar o site ou ficar **3 minutos parado**. O tempo é guardado por dia, matéria e tópico. O tempo do **simulado** também fica parado nessas situações.
 - **Continuar de onde parou:** o site lembra a aula (e a aba), as questões respondidas e o simulado em andamento. Ao entrar de novo, uma janela mostra o que a pessoa estava estudando, **o que ela já estudou até ali** (resumo pessoal: tópicos vistos, pontos principais, anotações, ponto de atenção e tempo) e deixa **continuar** de onde parou, **recomeçar a matéria** ou ir ao painel.
 - **Resumo do que estudei** (menu Mais): por matéria, com o contexto para lembrar, o conteúdo de cada tópico visto, anotações e erros com a regra correta. Ao terminar a matéria aparece o aviso para ver o resumo completo.
 
