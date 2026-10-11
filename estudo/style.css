@@ -112,3 +112,16 @@ table{width:100%;border-collapse:collapse;font-size:.92rem}th,td{padding:.4rem .
 .hist-d{flex:1;display:flex;flex-direction:column;min-width:0}
 .hist-n{display:flex;flex-direction:column;align-items:flex-end;gap:.15rem;font-size:1.05rem}
 .hist-go{font-size:1.6rem;color:var(--mut);line-height:1}
+
+.tpill{position:fixed;left:12px;bottom:calc(66px + env(safe-area-inset-bottom));z-index:19;display:flex;align-items:center;gap:.45rem;padding:.3rem .7rem;border-radius:99px;background:var(--card);border:1px solid var(--line);font-size:.8rem;box-shadow:0 2px 8px rgba(0,0,0,.12);font-variant-numeric:tabular-nums}
+.tpill[hidden]{display:none}
+.tpill .tp-d{width:9px;height:9px;border-radius:50%;background:var(--mut)}
+.tpill.on .tp-d{background:var(--ok);box-shadow:0 0 0 3px var(--okbg)}
+.tpill .tp-t{font-weight:800}.tpill .tp-s{color:var(--mut)}
+@media(min-width:820px){.tpill{bottom:14px}}
+@media print{.tpill{display:none!important}}
+
+.dbars{display:flex;align-items:flex-end;gap:4px;height:90px}
+.db{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%;min-width:0}
+.db i{display:block;width:100%;background:var(--pri);border-radius:4px 4px 0 0;min-height:3px}
+.db span{font-size:.62rem;color:var(--mut);margin-top:2px}
