@@ -8,7 +8,7 @@ Sistema de estudo em HTML/JS puro (sem instalar nada) para o concurso da **SEMED
 - O progresso fica salvo no próprio aparelho. Para levar ao outro aparelho: *Mais → Ajustes → Exportar / Importar*.
 
 ## Contas (login por usuário)
-Ao abrir o site, a pessoa **cria uma conta** (nome, usuário ou e-mail e senha) ou **entra** na sua. Cada conta tem os seus próprios dados: cadastro, progresso, histórico de simulados, caderno de erros e revisões. Várias pessoas podem ter contas no mesmo aparelho, sem ver os dados umas das outras. Em *Minha conta*: sair, alterar senha e excluir a conta.
+Ao abrir o site, a pessoa **cria uma conta** (nome, senha e um login à escolha: **celular com DDD, e-mail ou nome de usuário**) ou **entra** na sua, digitando qualquer um dos três. O celular e o e-mail **não são verificados** (não há envio de código). Cada conta tem os seus próprios dados: cadastro, progresso, histórico de simulados, caderno de erros e revisões. Várias pessoas podem ter contas no mesmo aparelho, sem ver os dados umas das outras. Em *Minha conta*: sair, alterar senha e excluir a conta.
 
 > **Limite importante:** as contas ficam salvas **só no navegador do aparelho** (não há servidor). A mesma pessoa em outro celular/computador precisa criar outra conta (ou usar *Ajustes → Exportar/Importar*). A senha é guardada com hash (PBKDF2-SHA256 com sal), mas serve para separar usuários, não para proteger dados sensíveis, e não há recuperação de senha. Para login que acompanha a pessoa entre aparelhos é preciso um serviço de servidor (ex.: Firebase ou Supabase).
 > Quem já usava o site antes: o progresso é adotado pela **primeira conta criada** no aparelho.

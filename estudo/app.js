@@ -53,6 +53,25 @@
   function usuarios() { try { return JSON.parse(lsGet(LS_USERS) || '[]'); } catch (e) { return []; } }
   function salvaUsuarios(l) { lsSet(LS_USERS, JSON.stringify(l)); }
   function normLogin(l) { return String(l || '').trim().toLowerCase(); }
+  /* Identificador de login: celular, e-mail ou nome de usuário. Guardado normalizado (celular como "tel:DDD+número"). */
+  var TIPOS = { celular: { nome: 'Celular', rotulo: 'Número de celular (com DDD)', ph: 'Ex.: (69) 99999-9999', tipo: 'tel', modo: 'tel', auto: 'tel' },
+    email: { nome: 'E-mail', rotulo: 'E-mail', ph: 'Ex.: maria@email.com', tipo: 'email', modo: 'email', auto: 'email' },
+    usuario: { nome: 'Usuário', rotulo: 'Nome de usuário', ph: 'Ex.: maria.silva', tipo: 'text', modo: 'text', auto: 'username' } };
+  function soDigitos(t) { var d = String(t || '').replace(/\D/g, ''); if (d.length > 11 && d.indexOf('55') === 0) d = d.slice(2); if (d.length === 11 + 1 && d.charAt(0) === '0') d = d.slice(1); return d; }
+  function pareceCelular(t) { return /^[\d\s()+.\-]+$/.test(String(t || '').trim()) && soDigitos(t).length >= 8; }
+  function tipoDoLogin(l) { return String(l).indexOf('tel:') === 0 ? 'celular' : String(l).indexOf('@') > 0 ? 'email' : 'usuario'; }
+  /* Entrada digitada no login: descobre se é celular, e-mail ou usuário */
+  function detectaLogin(raw) { raw = String(raw || '').trim(); if (raw.indexOf('@') > 0) return raw.toLowerCase(); if (pareceCelular(raw)) return 'tel:' + soDigitos(raw); return raw.toLowerCase(); }
+  /* Valida e normaliza o identificador no cadastro, conforme a opção escolhida */
+  function validaIdentificador(tipo, raw) {
+    raw = String(raw || '').trim();
+    if (tipo === 'celular') { var d = soDigitos(raw); if (d.length < 10 || d.length > 11 || +d.slice(0, 2) < 11) return { erro: 'Digite o celular com DDD, por exemplo (69) 99999-9999.' }; if (d.length === 11 && d.charAt(2) !== '9') return { erro: 'Celular com 11 dígitos começa com 9 depois do DDD.' }; return { login: 'tel:' + d }; }
+    if (tipo === 'email') { if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(raw)) return { erro: 'Digite um e-mail válido, como nome@email.com.' }; return { login: raw.toLowerCase() }; }
+    if (!/^[a-zA-Z0-9._\-]{3,30}$/.test(raw)) return { erro: 'O usuário precisa ter de 3 a 30 caracteres: letras, números, ponto, hífen ou sublinhado, sem espaços.' };
+    if (/^\d+$/.test(raw)) return { erro: 'O usuário não pode ser só números (use a opção Celular para isso).' };
+    return { login: raw.toLowerCase() };
+  }
+  function mostraLogin(l) { l = String(l); if (l.indexOf('tel:') !== 0) return l; var d = l.slice(4); return '(' + d.slice(0, 2) + ') ' + (d.length === 11 ? d.slice(2, 7) + '-' + d.slice(7) : d.slice(2, 6) + '-' + d.slice(6)); }
   function usuarioAtual() { return usuarios().filter(function (u) { return u.id === UID; })[0] || null; }
   function sessaoId() { var v = ''; try { v = sessionStorage.getItem('estudo.sessao') || ''; } catch (e) { } return v || lsGet('estudo.sessao') || ''; }
   function iniciaSessao(id, lembrar) {
@@ -188,7 +207,7 @@
   function go(h) { if (location.hash === h) route(); else location.hash = h; }
 
   /* ---------- Telas de login e conta ---------- */
-  var loginModo = 'entrar';
+  var loginModo = 'entrar', loginTipo = 'celular';
   function vLogin(msg) {
     var chip = document.getElementById('nvchip'); if (chip) chip.hidden = true;
     document.getElementById('sidenav').innerHTML = ''; document.getElementById('bottomnav').innerHTML = '';
@@ -198,15 +217,16 @@
       '<div class="tabs"><button class="tab ' + (criar ? '' : 'on') + '" id="tb-ent"' + (lista.length ? '' : ' disabled') + '>Entrar</button><button class="tab ' + (criar ? 'on' : '') + '" id="tb-cri">Criar conta</button></div>';
     if (criar) {
       h += '<form id="fl" class="card" novalidate><label for="lg-nome">Seu nome</label><input type="text" id="lg-nome" maxlength="60" autocomplete="name" placeholder="Ex.: Maria Silva">' +
-        '<label for="lg-user">Usuário ou e-mail (para entrar)</label><input type="text" id="lg-user" maxlength="80" autocomplete="username" autocapitalize="none" placeholder="Ex.: maria ou maria@email.com">' +
+        '<div style="font-weight:600;margin:.6rem 0 .3rem">Como você quer se cadastrar?</div><div class="tabs" role="tablist" id="lg-tipos">' + Object.keys(TIPOS).map(function (k) { return '<button type="button" class="tab ' + (k === loginTipo ? 'on' : '') + '" data-t="' + k + '">' + TIPOS[k].nome + '</button>'; }).join('') + '</div>' +
+        '<label for="lg-user">' + TIPOS[loginTipo].rotulo + ' (será o seu login)</label><input type="' + TIPOS[loginTipo].tipo + '" id="lg-user" maxlength="80" inputmode="' + TIPOS[loginTipo].modo + '" autocomplete="' + TIPOS[loginTipo].auto + '" autocapitalize="none" placeholder="' + TIPOS[loginTipo].ph + '">' +
         '<label for="lg-pw">Senha (mínimo 6 caracteres)</label><input type="password" id="lg-pw" autocomplete="new-password">' +
         '<label for="lg-pw2">Repita a senha</label><input type="password" id="lg-pw2" autocomplete="new-password">' +
         '<label class="chk" style="font-weight:400;margin-top:.5rem"><input type="checkbox" id="lg-lembrar" checked><span>Manter conectado neste aparelho</span></label>' +
         '<div id="lg-err" class="small" role="alert" style="color:var(--bad);min-height:1.2em;margin:.4rem 0">' + esc(msg || '') + '</div><button type="submit" class="btn pri">Criar conta e entrar</button>' +
-        '<p class="small mut" style="margin-top:.8rem">🔒 A conta e o histórico ficam salvos <b>só neste aparelho</b> (não há servidor). Em outro celular ou computador é preciso criar outra conta. A senha é guardada de forma criptografada, mas serve para separar os usuários, não para proteger dados sensíveis.' + (lsGet(LS_LEGADO) && !lista.length ? ' Seu progresso de antes será mantido nesta primeira conta.' : '') + '</p></form>';
+        '<p class="small mut" style="margin-top:.8rem">🔒 A conta e o histórico ficam salvos <b>só neste aparelho</b> (não há servidor). Em outro celular ou computador é preciso criar outra conta. O celular ou e-mail não é verificado (não enviamos código): serve só como seu login. A senha é guardada de forma criptografada, mas serve para separar os usuários, não para proteger dados sensíveis.' + (lsGet(LS_LEGADO) && !lista.length ? ' Seu progresso de antes será mantido nesta primeira conta.' : '') + '</p></form>';
     } else {
-      h += '<form id="fl" class="card" novalidate>' + (lista.length > 1 ? '<div class="small mut">Contas neste aparelho:</div><div class="row" style="margin:.3rem 0">' + lista.map(function (u) { return '<button type="button" class="btn sm" data-u="' + esc(u.login) + '">👤 ' + esc(String(u.nome).split(' ')[0]) + '</button>'; }).join('') + '</div>' : '') +
-        '<label for="lg-user">Usuário ou e-mail</label><input type="text" id="lg-user" maxlength="80" autocomplete="username" autocapitalize="none">' +
+      h += '<form id="fl" class="card" novalidate>' + (lista.length > 1 ? '<div class="small mut">Contas neste aparelho:</div><div class="row" style="margin:.3rem 0">' + lista.map(function (u) { return '<button type="button" class="btn sm" data-u="' + esc(mostraLogin(u.login)) + '">👤 ' + esc(String(u.nome).split(' ')[0]) + '</button>'; }).join('') + '</div>' : '') +
+        '<label for="lg-user">Celular, e-mail ou usuário</label><input type="text" id="lg-user" maxlength="80" autocomplete="username" autocapitalize="none" placeholder="Como você se cadastrou">' +
         '<label for="lg-pw">Senha</label><input type="password" id="lg-pw" autocomplete="current-password">' +
         '<label class="chk" style="font-weight:400;margin-top:.5rem"><input type="checkbox" id="lg-lembrar" checked><span>Manter conectado neste aparelho</span></label>' +
         '<div id="lg-err" class="small" role="alert" style="color:var(--bad);min-height:1.2em;margin:.4rem 0">' + esc(msg || '') + '</div><button type="submit" class="btn pri">Entrar</button></form>';
@@ -215,12 +235,13 @@
     var te = document.getElementById('tb-ent'), tc = document.getElementById('tb-cri');
     if (te) te.onclick = function () { loginModo = 'entrar'; vLogin(); };
     if (tc) tc.onclick = function () { loginModo = 'criar'; vLogin(); };
+    Array.prototype.forEach.call($app.querySelectorAll('#lg-tipos [data-t]'), function (b) { b.onclick = function () { var v = ['lg-nome', 'lg-pw', 'lg-pw2'].map(function (i) { return document.getElementById(i).value; }); loginTipo = b.getAttribute('data-t'); vLogin(); ['lg-nome', 'lg-pw', 'lg-pw2'].forEach(function (i, k) { document.getElementById(i).value = v[k]; }); document.getElementById('lg-user').focus(); }; });
     Array.prototype.forEach.call($app.querySelectorAll('[data-u]'), function (b) { b.onclick = function () { document.getElementById('lg-user').value = b.getAttribute('data-u'); document.getElementById('lg-pw').focus(); }; });
     var erro = function (t) { document.getElementById('lg-err').textContent = t; };
     var lembrar = function () { return document.getElementById('lg-lembrar').checked; };
     document.getElementById('fl').onsubmit = function (e) {
       e.preventDefault();
-      var login = normLogin(document.getElementById('lg-user').value), pw = document.getElementById('lg-pw').value;
+      var rawId = document.getElementById('lg-user').value, login = criar ? '' : detectaLogin(rawId), pw = document.getElementById('lg-pw').value;
       if (!criar) {
         var u = usuarios().filter(function (x) { return x.login === login; })[0];
         if (!u) return erro('Usuário ou senha incorretos.');
@@ -231,11 +252,11 @@
       }
       var nome = document.getElementById('lg-nome').value.replace(/\s+/g, ' ').trim(), pw2 = document.getElementById('lg-pw2').value;
       if (nome.length < 2) return erro('Digite seu nome.');
-      if (login.length < 3 || /\s/.test(login)) return erro('O usuário precisa ter pelo menos 3 caracteres, sem espaços.');
+      var vi = validaIdentificador(loginTipo, rawId); if (vi.erro) return erro(vi.erro); login = vi.login;
       if (pw.length < 6) return erro('A senha precisa ter pelo menos 6 caracteres.');
       if (pw !== pw2) return erro('As senhas não são iguais.');
       var us = usuarios();
-      if (us.some(function (x) { return x.login === login; })) return erro('Esse usuário já existe neste aparelho. Escolha outro ou entre na conta.');
+      if (us.some(function (x) { return x.login === login; })) return erro('Já existe uma conta com ' + (loginTipo === 'celular' ? 'esse celular' : loginTipo === 'email' ? 'esse e-mail' : 'esse usuário') + ' neste aparelho. Entre na conta ou use outro.');
       var sal = novoSal();
       return hashSenha(pw, sal).then(function (hh) {
         var nu = { id: 'u' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36), nome: nome, login: login, sal: sal, h: hh, criado: Date.now() };
@@ -251,7 +272,7 @@
 
   function vConta() {
     var u = usuarioAtual(); if (!u) return go('#/');
-    var h = '<h1>Minha conta</h1><div class="card"><div class="row"><b>' + esc(u.nome) + '</b><span class="sp"></span><span class="small mut">usuário: ' + esc(u.login) + '</span></div><p class="small mut" style="margin:.3rem 0">Conta criada em ' + brDate(iso(new Date(u.criado))) + '. Os dados desta conta (progresso, histórico de simulados, caderno de erros) ficam separados dos das outras contas deste aparelho.</p>' +
+    var h = '<h1>Minha conta</h1><div class="card"><div class="row"><b>' + esc(u.nome) + '</b><span class="sp"></span><span class="small mut">' + TIPOS[tipoDoLogin(u.login)].nome.toLowerCase() + ': ' + esc(mostraLogin(u.login)) + '</span></div><p class="small mut" style="margin:.3rem 0">Conta criada em ' + brDate(iso(new Date(u.criado))) + '. Os dados desta conta (progresso, histórico de simulados, caderno de erros) ficam separados dos das outras contas deste aparelho.</p>' +
       '<div class="row"><button class="btn pri" id="ct-sair">Sair da conta</button></div></div>' +
       '<div class="card"><h3 style="margin-top:0">Alterar senha</h3><label for="ct-at">Senha atual</label><input type="password" id="ct-at" autocomplete="current-password"><label for="ct-nv">Nova senha (mínimo 6)</label><input type="password" id="ct-nv" autocomplete="new-password"><label for="ct-nv2">Repita a nova senha</label><input type="password" id="ct-nv2" autocomplete="new-password"><div id="ct-err" class="small" role="alert" style="min-height:1.2em;margin:.4rem 0"></div><button class="btn" id="ct-pw">Salvar nova senha</button></div>' +
       '<div class="card"><h3 style="margin-top:0">Excluir conta</h3><p class="small mut">Apaga esta conta e todo o progresso e histórico dela deste aparelho. Não dá para desfazer.</p><button class="btn" id="ct-del" style="color:var(--bad)">Excluir minha conta</button></div>';
@@ -812,7 +833,7 @@
     $app.innerHTML = '<h1>Mais</h1><div class="card list">' + [['#/erros', '📓 Caderno de erros'], ['#/revisao', '🔁 Revisão espaçada'], ['#/cronograma', '📅 Cronograma'], ['#/edital', '📄 Edital e regras da prova'], ['#/conta', '👤 Minha conta e sair'], ['#/config', '⚙️ Ajustes e backup']].map(function (x) { return '<a class="item" href="' + x[0] + '">' + x[1] + '</a>'; }).join('') + '</div>';
   }
   function vConfig() {
-    $app.innerHTML = '<h1>Ajustes</h1><div class="card"><h3 style="margin-top:0">Meu cadastro</h3><p class="small mut" style="margin:0 0 .4rem">Conta: ' + esc((usuarioAtual() || {}).login || '') + ' · <a href="#/conta">Minha conta / sair</a></p><p class="small">' + esc(S.perfil.nome) + ' · ' + inscs().map(rotulo).map(esc).join(', ') + '</p><label for="nv">Estou estudando para</label><select id="nv">' + inscs().map(function (i, k) { return '<option value="' + k + '"' + (i.c === S.concurso && i.n === S.nivel ? ' selected' : '') + '>' + esc(rotulo(i)) + '</option>'; }).join('') + '</select><p class="small mut">Muda os tópicos, questões, simulado e apostilas. Seu progresso é mantido.</p><a class="btn sm" href="#/cadastro">✎ Editar cadastro / adicionar nível</a></div><div class="card"><h3 style="margin-top:0">Minha meta</h3><label for="mn">Meta de acertos na prova (%) - a nota mínima é 50%</label><input type="number" id="mn" min="50" max="100" value="' + metaNota() + '"><label for="mq">Questões por dia</label><input type="number" id="mq" min="5" max="200" value="' + (S.metaq || 30) + '"></div><div class="card"><label for="meta">Meta semanal (etapas concluídas por semana)</label><input type="number" id="meta" min="1" max="40" value="' + S.meta + '"></div>' +
+    $app.innerHTML = '<h1>Ajustes</h1><div class="card"><h3 style="margin-top:0">Meu cadastro</h3><p class="small mut" style="margin:0 0 .4rem">Conta: ' + esc(mostraLogin((usuarioAtual() || {}).login || '')) + ' · <a href="#/conta">Minha conta / sair</a></p><p class="small">' + esc(S.perfil.nome) + ' · ' + inscs().map(rotulo).map(esc).join(', ') + '</p><label for="nv">Estou estudando para</label><select id="nv">' + inscs().map(function (i, k) { return '<option value="' + k + '"' + (i.c === S.concurso && i.n === S.nivel ? ' selected' : '') + '>' + esc(rotulo(i)) + '</option>'; }).join('') + '</select><p class="small mut">Muda os tópicos, questões, simulado e apostilas. Seu progresso é mantido.</p><a class="btn sm" href="#/cadastro">✎ Editar cadastro / adicionar nível</a></div><div class="card"><h3 style="margin-top:0">Minha meta</h3><label for="mn">Meta de acertos na prova (%) - a nota mínima é 50%</label><input type="number" id="mn" min="50" max="100" value="' + metaNota() + '"><label for="mq">Questões por dia</label><input type="number" id="mq" min="5" max="200" value="' + (S.metaq || 30) + '"></div><div class="card"><label for="meta">Meta semanal (etapas concluídas por semana)</label><input type="number" id="meta" min="1" max="40" value="' + S.meta + '"></div>' +
       '<div class="card"><h3 style="margin-top:0">Backup do progresso</h3><p class="small mut">O progresso desta conta fica salvo neste aparelho. Para levar a outro (celular ↔ PC), exporte e importe o arquivo.</p><div class="row"><button class="btn" id="exp">⬇ Exportar</button><label class="btn" for="imp" style="margin:0">⬆ Importar</label><input type="file" id="imp" accept=".json,application/json" hidden></div></div>' +
       '<div class="card"><h3 style="margin-top:0">Apostilas em PDF</h3><div class="res">' + mats().map(function (m) { return '<a target="_blank" rel="noopener" href="pdf/apostila-' + S.nivel + '-' + m.id + '.pdf">' + esc(m.nome) + '</a>'; }).join('') + '<a target="_blank" rel="noopener" href="pdf/apostila-' + S.nivel + '-completa.pdf"><b>Apostila completa (' + esc(nvInfo().nome) + ')</b></a></div></div>' +
       '<div class="card"><h3 style="margin-top:0">Zerar tudo</h3><button class="btn" id="rst" style="color:var(--bad)">Apagar o progresso desta conta</button></div>';
