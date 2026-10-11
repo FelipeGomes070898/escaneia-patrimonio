@@ -88,7 +88,7 @@
   function guardaRetomar() { retomarAnterior = S.retomar ? JSON.parse(JSON.stringify(S.retomar)) : null; }
   function encerraSessao() {
     try { sessionStorage.removeItem('estudo.sessao'); sessionStorage.removeItem('estudo.nvok'); } catch (e) { }
-    salvaTudo(); T.sess = null; T.sim = null; lsDel('estudo.sessao'); UID = ''; S = defaults(); nivelConfirmado = false; loginModo = 'entrar'; applyTheme();
+    salvaTudo(); T.sess = null; T.sim = null; lsDel('estudo.sessao'); UID = ''; S = defaults(); nivelConfirmado = false; loginModo = ''; applyTheme();
   }
   function b64(bytes) { var t = ''; for (var i = 0; i < bytes.length; i++) t += String.fromCharCode(bytes[i]); return btoa(t); }
   function deB64(t) { var r = atob(t), o = new Uint8Array(r.length); for (var i = 0; i < r.length; i++) o[i] = r.charCodeAt(i); return o; }
@@ -284,44 +284,56 @@
   function go(h) { if (location.hash === h) route(); else location.hash = h; }
 
   /* ---------- Telas de login e conta ---------- */
-  var loginModo = 'entrar', loginTipo = 'celular';
+  var loginModo = '', loginTipo = 'celular', loginPre = '', loginMsgOk = false;
   function vLogin(msg) {
     var chip = document.getElementById('nvchip'); if (chip) chip.hidden = true;
     document.getElementById('sidenav').innerHTML = ''; document.getElementById('bottomnav').innerHTML = '';
-    var lista = usuarios(), criar = loginModo === 'criar' || !lista.length;
+    var lista = usuarios(); if (!loginModo) loginModo = lista.length ? 'entrar' : 'inicio';
+    var criar = loginModo === 'criar', inicio = loginModo === 'inicio';
     var h = '<div class="card" style="border-left:6px solid var(--pri)"><b>Rota do Concurso</b><p class="small" style="margin:.3rem 0">Concursos de Porto Velho/RO 2026. Cada pessoa tem o seu próprio login, e o seu progresso e histórico ficam separados dos de outras pessoas.</p></div>' +
-      '<h1>' + (criar ? 'Criar conta' : 'Entrar') + '</h1>' +
-      '<div class="tabs"><button class="tab ' + (criar ? '' : 'on') + '" id="tb-ent"' + (lista.length ? '' : ' disabled') + '>Entrar</button><button class="tab ' + (criar ? 'on' : '') + '" id="tb-cri">Criar conta</button></div>';
-    if (criar) {
+      '<h1>' + (inicio ? 'Bem-vindo(a)' : criar ? 'Criar conta' : 'Entrar') + '</h1>' +
+      (inicio ? '' : '<div class="tabs"><button class="tab ' + (criar ? '' : 'on') + '" id="tb-ent">Entrar</button><button class="tab ' + (criar ? 'on' : '') + '" id="tb-cri">Criar conta</button></div>');
+    var impBtn = '<button type="button" class="btn sm" id="lg-imp">📥 Importar conta de outro aparelho</button>';
+    if (inicio) {
+      h += '<div class="card"><p style="margin:0 0 .6rem"><b>Já tem conta?</b> Entre com o seu login e a sua senha. <b>É o primeiro acesso?</b> Crie a sua conta uma única vez.</p>' +
+        '<div style="display:grid;gap:.6rem"><button class="btn pri" id="go-ent">🔑 Entrar na minha conta</button><button class="btn" id="go-cri">✨ Criar conta (primeiro acesso)</button></div>' +
+        '<p class="small mut" style="margin:.8rem 0 .4rem">Já criou a conta em outro celular ou computador? Leve-a para este aparelho:</p>' + impBtn + '<div id="lg-err" class="small" role="alert" style="min-height:1.2em;margin:.4rem 0"></div></div>';
+    } else if (criar) {
       h += '<form id="fl" class="card" novalidate><label for="lg-nome">Seu nome</label><input type="text" id="lg-nome" maxlength="60" autocomplete="name" placeholder="Ex.: Maria Silva">' +
         '<div style="font-weight:600;margin:.6rem 0 .3rem">Como você quer se cadastrar?</div><div class="tabs" role="tablist" id="lg-tipos">' + Object.keys(TIPOS).map(function (k) { return '<button type="button" class="tab ' + (k === loginTipo ? 'on' : '') + '" data-t="' + k + '">' + TIPOS[k].nome + '</button>'; }).join('') + '</div>' +
         '<label for="lg-user">' + TIPOS[loginTipo].rotulo + ' (será o seu login)</label><input type="' + TIPOS[loginTipo].tipo + '" id="lg-user" maxlength="80" inputmode="' + TIPOS[loginTipo].modo + '" autocomplete="' + TIPOS[loginTipo].auto + '" autocapitalize="none" placeholder="' + TIPOS[loginTipo].ph + '">' +
         '<label for="lg-pw">Senha (mínimo 6 caracteres)</label><input type="password" id="lg-pw" autocomplete="new-password">' +
         '<label for="lg-pw2">Repita a senha</label><input type="password" id="lg-pw2" autocomplete="new-password">' +
         '<label class="chk" style="font-weight:400;margin-top:.5rem"><input type="checkbox" id="lg-lembrar" checked><span>Manter conectado neste aparelho</span></label>' +
-        '<div id="lg-err" class="small" role="alert" style="color:var(--bad);min-height:1.2em;margin:.4rem 0">' + esc(msg || '') + '</div><button type="submit" class="btn pri">Criar conta e entrar</button>' +
-        '<p class="small mut" style="margin-top:.8rem">🔒 A conta e o histórico ficam salvos <b>só neste aparelho</b> (não há servidor). Em outro celular ou computador é preciso criar outra conta. O celular ou e-mail não é verificado (não enviamos código): serve só como seu login. A senha é guardada de forma criptografada, mas serve para separar os usuários, não para proteger dados sensíveis.' + (lsGet(LS_LEGADO) && !lista.length ? ' Seu progresso de antes será mantido nesta primeira conta.' : '') + '</p></form>';
+        '<div id="lg-err" class="small" role="alert" style="color:var(--bad);min-height:1.2em;margin:.4rem 0">' + esc(msg || '') + '</div><button type="submit" class="btn pri">Criar conta e entrar</button> <span class="small">Já tem conta? <a href="#/" id="ln-ent">Entrar</a></span>' +
+        '<p class="small mut" style="margin-top:.8rem">🔒 A conta e o histórico ficam salvos <b>só neste aparelho</b> (não há servidor). Para usar a mesma conta em outro celular ou computador, exporte-a em Minha conta e importe na tela de entrada. O celular ou e-mail não é verificado (não enviamos código): serve só como seu login. A senha é guardada de forma criptografada, mas serve para separar os usuários, não para proteger dados sensíveis.' + (lsGet(LS_LEGADO) && !lista.length ? ' Seu progresso de antes será mantido nesta primeira conta.' : '') + '</p></form>';
     } else {
-      h += '<form id="fl" class="card" novalidate>' + (lista.length > 1 ? '<div class="small mut">Contas neste aparelho:</div><div class="row" style="margin:.3rem 0">' + lista.map(function (u) { return '<button type="button" class="btn sm" data-u="' + esc(mostraLogin(u.login)) + '">👤 ' + esc(String(u.nome).split(' ')[0]) + '</button>'; }).join('') + '</div>' : '') +
+      h += (lista.length ? '' : '<div class="aviso">Ainda não há nenhuma conta <b>neste aparelho</b>. Se é o seu primeiro acesso, use <b>Criar conta</b>. Se você já criou a conta em outro celular ou computador, use <b>Importar conta</b>.</div>') + '<form id="fl" class="card" novalidate>' + (lista.length > 1 ? '<div class="small mut">Contas neste aparelho:</div><div class="row" style="margin:.3rem 0">' + lista.map(function (u) { return '<button type="button" class="btn sm" data-u="' + esc(mostraLogin(u.login)) + '">👤 ' + esc(String(u.nome).split(' ')[0]) + '</button>'; }).join('') + '</div>' : '') +
         '<label for="lg-user">Celular, e-mail ou usuário</label><input type="text" id="lg-user" maxlength="80" autocomplete="username" autocapitalize="none" placeholder="Como você se cadastrou">' +
         '<label for="lg-pw">Senha</label><input type="password" id="lg-pw" autocomplete="current-password">' +
         '<label class="chk" style="font-weight:400;margin-top:.5rem"><input type="checkbox" id="lg-lembrar" checked><span>Manter conectado neste aparelho</span></label>' +
-        '<div id="lg-err" class="small" role="alert" style="color:var(--bad);min-height:1.2em;margin:.4rem 0">' + esc(msg || '') + '</div><button type="submit" class="btn pri">Entrar</button></form>';
+        '<div id="lg-err" class="small" role="alert" style="color:' + (loginMsgOk ? 'var(--ok)' : 'var(--bad)') + ';min-height:1.2em;margin:.4rem 0">' + esc(msg || '') + '</div><button type="submit" class="btn pri">Entrar</button>' +
+        '<p class="small mut" style="margin:.8rem 0 .4rem">Primeiro acesso? <a href="#/" id="ln-cri">Criar conta</a> · Esqueceu a senha? Não há recuperação (o site não tem servidor); importe um backup da conta ou crie outra.</p>' + impBtn + '</form>';
     }
+    h += '<input type="file" id="lg-file" accept=".json,application/json" hidden>';
     $app.innerHTML = h;
     var te = document.getElementById('tb-ent'), tc = document.getElementById('tb-cri');
-    if (te) te.onclick = function () { loginModo = 'entrar'; vLogin(); };
-    if (tc) tc.onclick = function () { loginModo = 'criar'; vLogin(); };
+    function vaiPara(m) { return function (e) { if (e && e.preventDefault) e.preventDefault(); loginModo = m; loginMsgOk = false; vLogin(); }; }
+    [['tb-ent', 'entrar'], ['tb-cri', 'criar'], ['go-ent', 'entrar'], ['go-cri', 'criar'], ['ln-ent', 'entrar'], ['ln-cri', 'criar']].forEach(function (x) { var el = document.getElementById(x[0]); if (el) el.onclick = vaiPara(x[1]); });
+    var ib = document.getElementById('lg-imp'), fi = document.getElementById('lg-file');
+    if (ib && fi) { ib.onclick = function () { fi.click(); }; fi.onchange = function () { var f = fi.files[0]; if (f) importaConta(f); fi.value = ''; }; }
+    if (loginPre && document.getElementById('lg-user') && !criar) { document.getElementById('lg-user').value = loginPre; loginPre = ''; var pwEl = document.getElementById('lg-pw'); if (pwEl) pwEl.focus(); }
     Array.prototype.forEach.call($app.querySelectorAll('#lg-tipos [data-t]'), function (b) { b.onclick = function () { var v = ['lg-nome', 'lg-pw', 'lg-pw2'].map(function (i) { return document.getElementById(i).value; }); loginTipo = b.getAttribute('data-t'); vLogin(); ['lg-nome', 'lg-pw', 'lg-pw2'].forEach(function (i, k) { document.getElementById(i).value = v[k]; }); document.getElementById('lg-user').focus(); }; });
     Array.prototype.forEach.call($app.querySelectorAll('[data-u]'), function (b) { b.onclick = function () { document.getElementById('lg-user').value = b.getAttribute('data-u'); document.getElementById('lg-pw').focus(); }; });
     var erro = function (t) { document.getElementById('lg-err').textContent = t; };
     var lembrar = function () { return document.getElementById('lg-lembrar').checked; };
+    if (!document.getElementById('fl')) return;
     document.getElementById('fl').onsubmit = function (e) {
       e.preventDefault();
       var rawId = document.getElementById('lg-user').value, login = criar ? '' : detectaLogin(rawId), pw = document.getElementById('lg-pw').value;
       if (!criar) {
         var u = usuarios().filter(function (x) { return x.login === login; })[0];
-        if (!u) return erro('Usuário ou senha incorretos.');
+        if (!u) return erro(lista.length ? 'Usuário ou senha incorretos.' : 'Não há conta com esse login neste aparelho. Crie uma conta ou importe a sua.');
         return senhaConfere(u, pw).then(function (ok) {
           if (!ok) return erro(String(u.h).charAt(0) === 'p' && !(window.crypto && crypto.subtle) ? 'Este navegador não consegue verificar a senha aqui. Abra o site pelo endereço https.' : 'Usuário ou senha incorretos.');
           iniciaSessao(u.id, lembrar()); go('#/'); route(); confirmarNivel(); if (!document.querySelector('.modal')) oferecerRetomar();
@@ -347,13 +359,41 @@
     };
   }
 
+  /* Levar a conta para outro aparelho: o arquivo tem o cadastro, a senha (criptografada) e todo o progresso */
+  function exportaConta() {
+    var u = usuarioAtual(); if (!u) return;
+    save();
+    var blob = new Blob([JSON.stringify({ tipo: 'rota-conta', versao: 1, exportado: Date.now(), user: u, dados: S })], { type: 'application/json' }), a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = 'conta-rota-do-concurso-' + today() + '.json'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+  }
+  function importaConta(file) {
+    var fail = function (t) { loginMsgOk = false; var e = document.getElementById('lg-err'); if (e) { e.style.color = 'var(--bad)'; e.textContent = t; } };
+    if (file.size > 5 * 1024 * 1024) return fail('Arquivo grande demais para ser uma conta.');
+    var r = new FileReader();
+    r.onload = function () {
+      var o; try { o = JSON.parse(r.result); } catch (x) { return fail('Esse arquivo não é válido.'); }
+      var u = o && o.user;
+      if (!o || o.tipo !== 'rota-conta' || !u || !u.login || !u.sal || !u.h || !u.nome || !o.dados || typeof o.dados !== 'object') return fail('Esse arquivo não é uma conta exportada pela Rota do Concurso.');
+      var us = usuarios();
+      if (us.some(function (x) { return x.login === u.login; })) { loginModo = 'entrar'; loginPre = mostraLogin(u.login); loginMsgOk = false; return vLogin('Já existe uma conta com esse login neste aparelho. Entre com a sua senha.'); }
+      var id = us.some(function (x) { return x.id === u.id; }) || !u.id ? 'u' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36) : u.id;
+      us.push({ id: id, nome: String(u.nome).slice(0, 60), login: String(u.login), sal: String(u.sal), h: String(u.h), criado: u.criado || Date.now(), dono: us.length === 0 });
+      salvaUsuarios(us); lsSet('estudo.v1.' + id, JSON.stringify(o.dados));
+      loginModo = 'entrar'; loginPre = mostraLogin(u.login); loginMsgOk = true; vLogin('Conta importada! Entre com a sua senha.');
+    };
+    r.onerror = function () { fail('Não consegui ler o arquivo.'); };
+    r.readAsText(file);
+  }
+
   function vConta() {
     var u = usuarioAtual(); if (!u) return go('#/');
     var h = '<h1>Minha conta</h1><div class="card"><div class="row"><b>' + esc(u.nome) + '</b><span class="sp"></span><span class="small mut">' + TIPOS[tipoDoLogin(u.login)].nome.toLowerCase() + ': ' + esc(mostraLogin(u.login)) + '</span></div><p class="small mut" style="margin:.3rem 0">Conta criada em ' + brDate(iso(new Date(u.criado))) + '. Os dados desta conta (progresso, histórico de simulados, caderno de erros) ficam separados dos das outras contas deste aparelho.</p>' +
       '<div class="row"><button class="btn pri" id="ct-sair">Sair da conta</button></div></div>' +
+      '<div class="card"><h3 style="margin-top:0">Usar esta conta em outro aparelho</h3><p class="small mut">Exporte a conta (cadastro, senha e todo o progresso) e, no outro celular ou computador, toque em <b>Importar conta</b> na tela de entrada. O arquivo contém a sua senha criptografada e o seu histórico: guarde com cuidado.</p><button class="btn" id="ct-exp">📤 Exportar minha conta</button></div>' +
       '<div class="card"><h3 style="margin-top:0">Alterar senha</h3><label for="ct-at">Senha atual</label><input type="password" id="ct-at" autocomplete="current-password"><label for="ct-nv">Nova senha (mínimo 6)</label><input type="password" id="ct-nv" autocomplete="new-password"><label for="ct-nv2">Repita a nova senha</label><input type="password" id="ct-nv2" autocomplete="new-password"><div id="ct-err" class="small" role="alert" style="min-height:1.2em;margin:.4rem 0"></div><button class="btn" id="ct-pw">Salvar nova senha</button></div>' +
       '<div class="card"><h3 style="margin-top:0">Excluir conta</h3><p class="small mut">Apaga esta conta e todo o progresso e histórico dela deste aparelho. Não dá para desfazer.</p><button class="btn" id="ct-del" style="color:var(--bad)">Excluir minha conta</button></div>';
     $app.innerHTML = h;
+    document.getElementById('ct-exp').onclick = function () { exportaConta(); toast('Arquivo da conta salvo'); };
     document.getElementById('ct-sair').onclick = function () { encerraSessao(); go('#/'); route(); };
     document.getElementById('ct-pw').onclick = function () {
       var at = document.getElementById('ct-at').value, nv = document.getElementById('ct-nv').value, nv2 = document.getElementById('ct-nv2').value, er = document.getElementById('ct-err');
