@@ -7,6 +7,12 @@ Sistema de estudo em HTML/JS puro (sem instalar nada) para o concurso da **SEMED
 - **No celular:** publique a pasta (GitHub Pages, Netlify, etc.) e abra o endereço; use "Adicionar à tela inicial". Depois da primeira visita funciona offline (service worker; exige `https` ou `localhost`).
 - O progresso fica salvo no próprio aparelho. Para levar ao outro aparelho: *Mais → Ajustes → Exportar / Importar*.
 
+## Contas (login por usuário)
+Ao abrir o site, a pessoa **cria uma conta** (nome, usuário ou e-mail e senha) ou **entra** na sua. Cada conta tem os seus próprios dados: cadastro, progresso, histórico de simulados, caderno de erros e revisões. Várias pessoas podem ter contas no mesmo aparelho, sem ver os dados umas das outras. Em *Minha conta*: sair, alterar senha e excluir a conta.
+
+> **Limite importante:** as contas ficam salvas **só no navegador do aparelho** (não há servidor). A mesma pessoa em outro celular/computador precisa criar outra conta (ou usar *Ajustes → Exportar/Importar*). A senha é guardada com hash (PBKDF2-SHA256 com sal), mas serve para separar usuários, não para proteger dados sensíveis, e não há recuperação de senha. Para login que acompanha a pessoa entre aparelhos é preciso um serviço de servidor (ex.: Firebase ou Supabase).
+> Quem já usava o site antes: o progresso é adotado pela **primeira conta criada** no aparelho.
+
 ## Cadastro: concurso e nível
 Antes de entrar, a pessoa se **cadastra**: nome, o(s) **concurso(s)** em que se inscreveu (**SEMED, SEMUSA, IPAM ou SESAU-RO**) e, dentro de cada um, o **nível que pagou** (fundamental, médio e/ou superior, conforme os níveis de cada concurso). Cada par concurso + nível é uma inscrição; quem tem mais de uma escolhe qual estudar ao entrar e alterna pelo concurso no topo da tela. Banca, data da prova e estrutura mudam conforme a inscrição ativa. Tópicos, questões, simulado e apostilas seguem o nível. O cadastro (em *Ajustes → Meu cadastro*) pode ser editado sem perder o progresso.
 

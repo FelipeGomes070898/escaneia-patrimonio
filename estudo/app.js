@@ -2,15 +2,22 @@
 (function () {
   'use strict';
   var C = window.CONC;
-  var LS = 'estudo.v1', LSSIM = 'estudo.sim';
+  /* Contas locais: cada usuário tem os seus dados (progresso, histórico, erros) em chaves próprias do navegador. */
+  var LS_USERS = 'estudo.users', LS_LEGADO = 'estudo.v1', LS_LEGADO_SIM = 'estudo.sim', UID = '';
   var $app = document.getElementById('app');
+  function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* sem armazenamento: segue em memória */ } }
+  function lsDel(k) { try { localStorage.removeItem(k); } catch (e) { } }
+  function chave() { return 'estudo.v1.' + UID; }
+  function chaveSim() { return 'estudo.sim.' + UID; }
 
   /* ---------- Estado ---------- */
   function defaults() { return { done: {}, answers: {}, erros: {}, rev: {}, notas: {}, links: {}, sims: [], cron: {}, meta: 5, tema: '', nivel: '', concurso: '', perfil: null, dia: {}, metaq: 30, metaNota: 70 }; }
-  var S = (function () { try { return Object.assign(defaults(), JSON.parse(localStorage.getItem(LS) || '{}')); } catch (e) { return defaults(); } })();
-  function save() { try { localStorage.setItem(LS, JSON.stringify(S)); } catch (e) { /* sem armazenamento: segue em memória */ } }
-  function loadSim() { try { return JSON.parse(localStorage.getItem(LSSIM) || 'null'); } catch (e) { return null; } }
-  function saveSim(s) { try { if (s) localStorage.setItem(LSSIM, JSON.stringify(s)); else localStorage.removeItem(LSSIM); } catch (e) { } }
+  var S = defaults();
+  function carregar() { try { S = Object.assign(defaults(), JSON.parse(lsGet(chave()) || '{}')); } catch (e) { S = defaults(); } }
+  function save() { if (UID) lsSet(chave(), JSON.stringify(S)); }
+  function loadSim() { try { return JSON.parse(lsGet(chaveSim()) || 'null'); } catch (e) { return null; } }
+  function saveSim(s) { if (!UID) return; if (s) lsSet(chaveSim(), JSON.stringify(s)); else lsDel(chaveSim()); }
 
   /* ---------- Utilidades ---------- */
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
@@ -41,6 +48,58 @@
   function pct(a, b) { return b ? Math.round(100 * a / b) : 0; }
   function bar(p, cor) { return '<div class="bar"><i style="width:' + p + '%' + (cor ? ';background:' + cor : '') + '"></i></div>'; }
   var LET = ['A', 'B', 'C', 'D', 'E'];
+
+  /* ---------- Contas: login e senha ---------- */
+  function usuarios() { try { return JSON.parse(lsGet(LS_USERS) || '[]'); } catch (e) { return []; } }
+  function salvaUsuarios(l) { lsSet(LS_USERS, JSON.stringify(l)); }
+  function normLogin(l) { return String(l || '').trim().toLowerCase(); }
+  function usuarioAtual() { return usuarios().filter(function (u) { return u.id === UID; })[0] || null; }
+  function sessaoId() { var v = ''; try { v = sessionStorage.getItem('estudo.sessao') || ''; } catch (e) { } return v || lsGet('estudo.sessao') || ''; }
+  function iniciaSessao(id, lembrar) {
+    try { sessionStorage.setItem('estudo.sessao', id); sessionStorage.removeItem('estudo.nvok'); } catch (e) { }
+    if (lembrar) lsSet('estudo.sessao', id); else lsDel('estudo.sessao');
+    UID = id; nivelConfirmado = false; carregar(); applyTheme();
+  }
+  function encerraSessao() {
+    try { sessionStorage.removeItem('estudo.sessao'); sessionStorage.removeItem('estudo.nvok'); } catch (e) { }
+    lsDel('estudo.sessao'); UID = ''; S = defaults(); nivelConfirmado = false; loginModo = 'entrar'; applyTheme();
+  }
+  function b64(bytes) { var t = ''; for (var i = 0; i < bytes.length; i++) t += String.fromCharCode(bytes[i]); return btoa(t); }
+  function deB64(t) { var r = atob(t), o = new Uint8Array(r.length); for (var i = 0; i < r.length; i++) o[i] = r.charCodeAt(i); return o; }
+  function novoSal() { var a = new Uint8Array(16); if (window.crypto && crypto.getRandomValues) crypto.getRandomValues(a); else for (var i = 0; i < 16; i++) a[i] = Math.floor(Math.random() * 256); return b64(a); }
+  /* SHA-256 em JavaScript puro: só é usado quando o navegador não oferece WebCrypto (página aberta fora de https) */
+  function sha256hex(ascii) {
+    function rr(v, a) { return (v >>> a) | (v << (32 - a)); }
+    var mp = Math.pow, mw = mp(2, 32), i, j, result = '', words = [], abl = ascii.length * 8;
+    var hash = sha256hex.h = sha256hex.h || [], k = sha256hex.k = sha256hex.k || [], pc = k.length, ic = {};
+    for (var cand = 2; pc < 64; cand++) { if (!ic[cand]) { for (i = 0; i < 313; i += cand) ic[i] = cand; hash[pc] = (mp(cand, 0.5) * mw) | 0; k[pc++] = (mp(cand, 1 / 3) * mw) | 0; } }
+    ascii += '\x80'; while (ascii.length % 64 - 56) ascii += '\x00';
+    for (i = 0; i < ascii.length; i++) { j = ascii.charCodeAt(i); words[i >> 2] |= j << ((3 - i) % 4) * 8; }
+    words[words.length] = ((abl / mw) | 0); words[words.length] = abl;
+    for (j = 0; j < words.length;) {
+      var w = words.slice(j, j += 16), oldHash = hash; hash = hash.slice(0, 8);
+      for (i = 0; i < 64; i++) {
+        var w15 = w[i - 15], w2 = w[i - 2], a = hash[0], e = hash[4];
+        var t1 = hash[7] + (rr(e, 6) ^ rr(e, 11) ^ rr(e, 25)) + ((e & hash[5]) ^ ((~e) & hash[6])) + k[i] + (w[i] = (i < 16) ? w[i] : (w[i - 16] + (rr(w15, 7) ^ rr(w15, 18) ^ (w15 >>> 3)) + w[i - 7] + (rr(w2, 17) ^ rr(w2, 19) ^ (w2 >>> 10)) | 0));
+        var t2 = (rr(a, 2) ^ rr(a, 13) ^ rr(a, 22)) + ((a & hash[1]) ^ (a & hash[2]) ^ (hash[1] & hash[2]));
+        hash = [(t1 + t2) | 0].concat(hash); hash[4] = (hash[4] + t1) | 0;
+      }
+      for (i = 0; i < 8; i++) hash[i] = (hash[i] + oldHash[i]) | 0;
+    }
+    for (i = 0; i < 8; i++) for (j = 3; j + 1; j--) { var bt = (hash[i] >> (j * 8)) & 255; result += ((bt < 16) ? 0 : '') + bt.toString(16); }
+    return result;
+  }
+  function hashSenha(senha, sal, metodo) {
+    metodo = metodo || ((window.crypto && crypto.subtle) ? 'p' : 'f');
+    if (metodo === 'p') {
+      if (!(window.crypto && crypto.subtle)) return Promise.resolve(null); /* conta criada em https, aberta em contexto sem WebCrypto */
+      return crypto.subtle.importKey('raw', new TextEncoder().encode(senha), 'PBKDF2', false, ['deriveBits'])
+        .then(function (k) { return crypto.subtle.deriveBits({ name: 'PBKDF2', salt: deB64(sal), iterations: 150000, hash: 'SHA-256' }, k, 256); })
+        .then(function (b) { return 'p:' + b64(new Uint8Array(b)); });
+    }
+    return new Promise(function (ok) { var h = sal + unescape(encodeURIComponent(senha)); for (var i = 0; i < 5000; i++) h = sha256hex(h); ok('f:' + h); });
+  }
+  function senhaConfere(u, senha) { return hashSenha(senha, u.sal, String(u.h).charAt(0)).then(function (h) { return h != null && h === u.h; }); }
 
   /* ---------- Tema ---------- */
   function applyTheme() { if (S.tema) document.documentElement.setAttribute('data-theme', S.tema); else document.documentElement.removeAttribute('data-theme'); }
@@ -96,11 +155,11 @@
     ['#/', 'Painel', '🏠'], ['#/trilha', 'Trilha', '🗺️'], ['#/praticar', 'Questões', '✏️'],
     ['#/simulados', 'Simulados', '⏱️'], ['#/mais', 'Mais', '☰']
   ];
-  var SIDE = NAV.slice(0, 4).concat([['#/erros', 'Erros', '📓'], ['#/revisao', 'Revisão', '🔁'], ['#/cronograma', 'Cronograma', '📅'], ['#/edital', 'Edital', '📄'], ['#/config', 'Ajustes', '⚙️']]);
+  var SIDE = NAV.slice(0, 4).concat([['#/erros', 'Erros', '📓'], ['#/revisao', 'Revisão', '🔁'], ['#/cronograma', 'Cronograma', '📅'], ['#/edital', 'Edital', '📄'], ['#/conta', 'Conta', '👤'], ['#/config', 'Ajustes', '⚙️']]);
   function drawNav(h) {
     var cur = h.split('?')[0], chip = document.getElementById('nvchip'), ni = nvInfo();
     if (chip) { chip.hidden = !ni; chip.textContent = ni && S.concurso ? '🎓 ' + concInfo(S.concurso).nome + ' · ' + NV_CURTO[S.nivel] : ''; chip.title = 'Seu nível cadastrado. Toque para trocar.'; }
-    function on(href) { if (href === '#/') return cur === '#/' || cur === ''; if (href === '#/mais') return ['#/mais', '#/erros', '#/revisao', '#/cronograma', '#/edital', '#/config'].indexOf(cur) >= 0; return cur.indexOf(href) === 0 || (href === '#/trilha' && /^#\/(materia|aula)/.test(cur)) || (href === '#/praticar' && cur.indexOf('#/quiz') === 0); }
+    function on(href) { if (href === '#/') return cur === '#/' || cur === ''; if (href === '#/mais') return ['#/mais', '#/erros', '#/revisao', '#/cronograma', '#/edital', '#/config', '#/conta'].indexOf(cur) >= 0; return cur.indexOf(href) === 0 || (href === '#/trilha' && /^#\/(materia|aula)/.test(cur)) || (href === '#/praticar' && cur.indexOf('#/quiz') === 0); }
     document.getElementById('sidenav').innerHTML = SIDE.map(function (n) { return '<a href="' + n[0] + '" class="' + (on(n[0]) ? 'on' : '') + '">' + n[1] + '</a>'; }).join('');
     document.getElementById('bottomnav').innerHTML = NAV.map(function (n) { return '<a href="' + n[0] + '" class="' + (on(n[0]) ? 'on' : '') + '"><span class="ic">' + n[2] + '</span>' + n[1] + '</a>'; }).join('');
   }
@@ -111,6 +170,7 @@
     var h = location.hash || '#/';
     var p = h.split('?')[0].split('/'); // ['#','x',...]
     var q = {}; (h.split('?')[1] || '').split('&').forEach(function (kv) { if (kv) { var a = kv.split('='); q[a[0]] = decodeURIComponent(a[1] || ''); } });
+    if (!UID) return vLogin();
     if (!S.perfil) { drawNav(h); return vCadastro(); }
     migraPerfil();
     if (!inscs().some(function (i) { return i.c === S.concurso && i.n === S.nivel; })) { setAlvo(inscs()[0].c, inscs()[0].n); save(); }
@@ -119,13 +179,102 @@
     var fn = {
       '': vPainel, trilha: vTrilha, materia: function () { vMateria(p[2]); }, aula: function () { vAula(p[2], p[3]); },
       praticar: vPraticar, simrev: function () { vSimRev(p[2]); }, quiz: function () { vQuiz(q); }, simulados: vSimulados, simulado: vSimRun, erros: vErros,
-      revisao: vRevisao, nivel: vNivel, cadastro: vCadastro, cronograma: vCron, edital: vEdital, config: vConfig, mais: vMais
+      revisao: vRevisao, conta: vConta, nivel: vNivel, cadastro: vCadastro, cronograma: vCron, edital: vEdital, config: vConfig, mais: vMais
     }[v] || vPainel;
     fn();
     window.scrollTo(0, 0);
   }
   window.addEventListener('hashchange', route);
   function go(h) { if (location.hash === h) route(); else location.hash = h; }
+
+  /* ---------- Telas de login e conta ---------- */
+  var loginModo = 'entrar';
+  function vLogin(msg) {
+    var chip = document.getElementById('nvchip'); if (chip) chip.hidden = true;
+    document.getElementById('sidenav').innerHTML = ''; document.getElementById('bottomnav').innerHTML = '';
+    var lista = usuarios(), criar = loginModo === 'criar' || !lista.length;
+    var h = '<div class="card" style="border-left:6px solid var(--pri)"><b>Rota do Concurso</b><p class="small" style="margin:.3rem 0">Concursos de Porto Velho/RO 2026. Cada pessoa tem o seu próprio login, e o seu progresso e histórico ficam separados dos de outras pessoas.</p></div>' +
+      '<h1>' + (criar ? 'Criar conta' : 'Entrar') + '</h1>' +
+      '<div class="tabs"><button class="tab ' + (criar ? '' : 'on') + '" id="tb-ent"' + (lista.length ? '' : ' disabled') + '>Entrar</button><button class="tab ' + (criar ? 'on' : '') + '" id="tb-cri">Criar conta</button></div>';
+    if (criar) {
+      h += '<form id="fl" class="card" novalidate><label for="lg-nome">Seu nome</label><input type="text" id="lg-nome" maxlength="60" autocomplete="name" placeholder="Ex.: Maria Silva">' +
+        '<label for="lg-user">Usuário ou e-mail (para entrar)</label><input type="text" id="lg-user" maxlength="80" autocomplete="username" autocapitalize="none" placeholder="Ex.: maria ou maria@email.com">' +
+        '<label for="lg-pw">Senha (mínimo 6 caracteres)</label><input type="password" id="lg-pw" autocomplete="new-password">' +
+        '<label for="lg-pw2">Repita a senha</label><input type="password" id="lg-pw2" autocomplete="new-password">' +
+        '<label class="chk" style="font-weight:400;margin-top:.5rem"><input type="checkbox" id="lg-lembrar" checked><span>Manter conectado neste aparelho</span></label>' +
+        '<div id="lg-err" class="small" role="alert" style="color:var(--bad);min-height:1.2em;margin:.4rem 0">' + esc(msg || '') + '</div><button type="submit" class="btn pri">Criar conta e entrar</button>' +
+        '<p class="small mut" style="margin-top:.8rem">🔒 A conta e o histórico ficam salvos <b>só neste aparelho</b> (não há servidor). Em outro celular ou computador é preciso criar outra conta. A senha é guardada de forma criptografada, mas serve para separar os usuários, não para proteger dados sensíveis.' + (lsGet(LS_LEGADO) && !lista.length ? ' Seu progresso de antes será mantido nesta primeira conta.' : '') + '</p></form>';
+    } else {
+      h += '<form id="fl" class="card" novalidate>' + (lista.length > 1 ? '<div class="small mut">Contas neste aparelho:</div><div class="row" style="margin:.3rem 0">' + lista.map(function (u) { return '<button type="button" class="btn sm" data-u="' + esc(u.login) + '">👤 ' + esc(String(u.nome).split(' ')[0]) + '</button>'; }).join('') + '</div>' : '') +
+        '<label for="lg-user">Usuário ou e-mail</label><input type="text" id="lg-user" maxlength="80" autocomplete="username" autocapitalize="none">' +
+        '<label for="lg-pw">Senha</label><input type="password" id="lg-pw" autocomplete="current-password">' +
+        '<label class="chk" style="font-weight:400;margin-top:.5rem"><input type="checkbox" id="lg-lembrar" checked><span>Manter conectado neste aparelho</span></label>' +
+        '<div id="lg-err" class="small" role="alert" style="color:var(--bad);min-height:1.2em;margin:.4rem 0">' + esc(msg || '') + '</div><button type="submit" class="btn pri">Entrar</button></form>';
+    }
+    $app.innerHTML = h;
+    var te = document.getElementById('tb-ent'), tc = document.getElementById('tb-cri');
+    if (te) te.onclick = function () { loginModo = 'entrar'; vLogin(); };
+    if (tc) tc.onclick = function () { loginModo = 'criar'; vLogin(); };
+    Array.prototype.forEach.call($app.querySelectorAll('[data-u]'), function (b) { b.onclick = function () { document.getElementById('lg-user').value = b.getAttribute('data-u'); document.getElementById('lg-pw').focus(); }; });
+    var erro = function (t) { document.getElementById('lg-err').textContent = t; };
+    var lembrar = function () { return document.getElementById('lg-lembrar').checked; };
+    document.getElementById('fl').onsubmit = function (e) {
+      e.preventDefault();
+      var login = normLogin(document.getElementById('lg-user').value), pw = document.getElementById('lg-pw').value;
+      if (!criar) {
+        var u = usuarios().filter(function (x) { return x.login === login; })[0];
+        if (!u) return erro('Usuário ou senha incorretos.');
+        return senhaConfere(u, pw).then(function (ok) {
+          if (!ok) return erro(String(u.h).charAt(0) === 'p' && !(window.crypto && crypto.subtle) ? 'Este navegador não consegue verificar a senha aqui. Abra o site pelo endereço https.' : 'Usuário ou senha incorretos.');
+          iniciaSessao(u.id, lembrar()); go('#/'); route(); confirmarNivel();
+        });
+      }
+      var nome = document.getElementById('lg-nome').value.replace(/\s+/g, ' ').trim(), pw2 = document.getElementById('lg-pw2').value;
+      if (nome.length < 2) return erro('Digite seu nome.');
+      if (login.length < 3 || /\s/.test(login)) return erro('O usuário precisa ter pelo menos 3 caracteres, sem espaços.');
+      if (pw.length < 6) return erro('A senha precisa ter pelo menos 6 caracteres.');
+      if (pw !== pw2) return erro('As senhas não são iguais.');
+      var us = usuarios();
+      if (us.some(function (x) { return x.login === login; })) return erro('Esse usuário já existe neste aparelho. Escolha outro ou entre na conta.');
+      var sal = novoSal();
+      return hashSenha(pw, sal).then(function (hh) {
+        var nu = { id: 'u' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36), nome: nome, login: login, sal: sal, h: hh, criado: Date.now() };
+        us.push(nu); salvaUsuarios(us);
+        if (us.length === 1 && lsGet(LS_LEGADO)) { /* primeira conta do aparelho: adota o progresso de antes */
+          lsSet('estudo.v1.' + nu.id, lsGet(LS_LEGADO)); lsSet('estudo.v1.legado-backup', lsGet(LS_LEGADO)); lsDel(LS_LEGADO);
+          var sm = lsGet(LS_LEGADO_SIM); if (sm) { lsSet('estudo.sim.' + nu.id, sm); lsDel(LS_LEGADO_SIM); }
+        }
+        iniciaSessao(nu.id, lembrar()); go('#/'); route(); confirmarNivel();
+      });
+    };
+  }
+
+  function vConta() {
+    var u = usuarioAtual(); if (!u) return go('#/');
+    var h = '<h1>Minha conta</h1><div class="card"><div class="row"><b>' + esc(u.nome) + '</b><span class="sp"></span><span class="small mut">usuário: ' + esc(u.login) + '</span></div><p class="small mut" style="margin:.3rem 0">Conta criada em ' + brDate(iso(new Date(u.criado))) + '. Os dados desta conta (progresso, histórico de simulados, caderno de erros) ficam separados dos das outras contas deste aparelho.</p>' +
+      '<div class="row"><button class="btn pri" id="ct-sair">Sair da conta</button></div></div>' +
+      '<div class="card"><h3 style="margin-top:0">Alterar senha</h3><label for="ct-at">Senha atual</label><input type="password" id="ct-at" autocomplete="current-password"><label for="ct-nv">Nova senha (mínimo 6)</label><input type="password" id="ct-nv" autocomplete="new-password"><label for="ct-nv2">Repita a nova senha</label><input type="password" id="ct-nv2" autocomplete="new-password"><div id="ct-err" class="small" role="alert" style="min-height:1.2em;margin:.4rem 0"></div><button class="btn" id="ct-pw">Salvar nova senha</button></div>' +
+      '<div class="card"><h3 style="margin-top:0">Excluir conta</h3><p class="small mut">Apaga esta conta e todo o progresso e histórico dela deste aparelho. Não dá para desfazer.</p><button class="btn" id="ct-del" style="color:var(--bad)">Excluir minha conta</button></div>';
+    $app.innerHTML = h;
+    document.getElementById('ct-sair').onclick = function () { encerraSessao(); go('#/'); route(); };
+    document.getElementById('ct-pw').onclick = function () {
+      var at = document.getElementById('ct-at').value, nv = document.getElementById('ct-nv').value, nv2 = document.getElementById('ct-nv2').value, er = document.getElementById('ct-err');
+      er.style.color = 'var(--bad)';
+      if (nv.length < 6) { er.textContent = 'A nova senha precisa ter pelo menos 6 caracteres.'; return; }
+      if (nv !== nv2) { er.textContent = 'As senhas novas não são iguais.'; return; }
+      senhaConfere(u, at).then(function (ok) {
+        if (!ok) { er.textContent = 'A senha atual está incorreta.'; return; }
+        var sal = novoSal();
+        hashSenha(nv, sal).then(function (hh) { var us = usuarios(); us.forEach(function (x) { if (x.id === u.id) { x.sal = sal; x.h = hh; } }); salvaUsuarios(us); toast('Senha alterada'); vConta(); });
+      });
+    };
+    document.getElementById('ct-del').onclick = function () {
+      ask('Excluir a conta "' + u.nome + '" e todo o progresso dela neste aparelho? Isso não pode ser desfeito.', function () {
+        salvaUsuarios(usuarios().filter(function (x) { return x.id !== u.id; })); lsDel(chave()); lsDel(chaveSim());
+        encerraSessao(); loginModo = 'entrar'; go('#/'); route();
+      });
+    };
+  }
 
   /* ---------- Cadastro: concurso(s) + nível pago em cada um ---------- */
   var NV_CURTO = { fundamental: 'Fundamental', medio: 'Médio', superior: 'Superior' };
@@ -174,7 +323,7 @@
     var marc = edit ? inscs() : (S.nivel ? [{ c: S.concurso || (C.concursos.filter(function (x) { return x.niveis.indexOf(S.nivel) >= 0; })[0] || C.concursos[0]).id, n: S.nivel }] : []);
     function tem(c, n) { return marc.some(function (i) { return i.c === c && i.n === n; }); }
     function temC(c) { return marc.some(function (i) { return i.c === c; }); }
-    var nome = edit ? S.perfil.nome : '';
+    var nome = edit ? S.perfil.nome : ((usuarioAtual() || {}).nome || '');
     var h = (edit ? '' : '<div class="card" style="border-left:6px solid var(--pri)"><b>Bem-vindo(a) à Rota do Concurso</b><p class="small" style="margin:.3rem 0">Concursos de Porto Velho/RO 2026. Primeiro o cadastro; depois o sistema monta o seu estudo para passar:</p><ul class="small" style="margin:.2rem 0;padding-left:1.1rem"><li>meta de nota e nota projetada</li><li>missão diária e foco nos seus pontos fracos</li><li>simulados, caderno de erros e revisão espaçada</li></ul></div>') +
       '<h1>' + (edit ? 'Meu cadastro' : 'Cadastre-se para entrar') + '</h1>' +
       '<p class="mut">' + (edit ? 'Atualize seu nome ou suas inscrições.' : 'Informe seu nome, o(s) concurso(s) em que você se inscreveu e o nível que pagou em cada um. Tudo no site é montado para você passar nessa prova: meta de nota, missão diária e foco nos seus pontos fracos.') + '</p>' +
@@ -660,13 +809,13 @@
 
   /* ---------- Mais / Config ---------- */
   function vMais() {
-    $app.innerHTML = '<h1>Mais</h1><div class="card list">' + [['#/erros', '📓 Caderno de erros'], ['#/revisao', '🔁 Revisão espaçada'], ['#/cronograma', '📅 Cronograma'], ['#/edital', '📄 Edital e regras da prova'], ['#/config', '⚙️ Ajustes e backup']].map(function (x) { return '<a class="item" href="' + x[0] + '">' + x[1] + '</a>'; }).join('') + '</div>';
+    $app.innerHTML = '<h1>Mais</h1><div class="card list">' + [['#/erros', '📓 Caderno de erros'], ['#/revisao', '🔁 Revisão espaçada'], ['#/cronograma', '📅 Cronograma'], ['#/edital', '📄 Edital e regras da prova'], ['#/conta', '👤 Minha conta e sair'], ['#/config', '⚙️ Ajustes e backup']].map(function (x) { return '<a class="item" href="' + x[0] + '">' + x[1] + '</a>'; }).join('') + '</div>';
   }
   function vConfig() {
-    $app.innerHTML = '<h1>Ajustes</h1><div class="card"><h3 style="margin-top:0">Meu cadastro</h3><p class="small">' + esc(S.perfil.nome) + ' · ' + inscs().map(rotulo).map(esc).join(', ') + '</p><label for="nv">Estou estudando para</label><select id="nv">' + inscs().map(function (i, k) { return '<option value="' + k + '"' + (i.c === S.concurso && i.n === S.nivel ? ' selected' : '') + '>' + esc(rotulo(i)) + '</option>'; }).join('') + '</select><p class="small mut">Muda os tópicos, questões, simulado e apostilas. Seu progresso é mantido.</p><a class="btn sm" href="#/cadastro">✎ Editar cadastro / adicionar nível</a></div><div class="card"><h3 style="margin-top:0">Minha meta</h3><label for="mn">Meta de acertos na prova (%) - a nota mínima é 50%</label><input type="number" id="mn" min="50" max="100" value="' + metaNota() + '"><label for="mq">Questões por dia</label><input type="number" id="mq" min="5" max="200" value="' + (S.metaq || 30) + '"></div><div class="card"><label for="meta">Meta semanal (etapas concluídas por semana)</label><input type="number" id="meta" min="1" max="40" value="' + S.meta + '"></div>' +
-      '<div class="card"><h3 style="margin-top:0">Backup do progresso</h3><p class="small mut">Seu progresso fica salvo neste aparelho. Para levar a outro (celular ↔ PC), exporte e importe o arquivo.</p><div class="row"><button class="btn" id="exp">⬇ Exportar</button><label class="btn" for="imp" style="margin:0">⬆ Importar</label><input type="file" id="imp" accept=".json,application/json" hidden></div></div>' +
+    $app.innerHTML = '<h1>Ajustes</h1><div class="card"><h3 style="margin-top:0">Meu cadastro</h3><p class="small mut" style="margin:0 0 .4rem">Conta: ' + esc((usuarioAtual() || {}).login || '') + ' · <a href="#/conta">Minha conta / sair</a></p><p class="small">' + esc(S.perfil.nome) + ' · ' + inscs().map(rotulo).map(esc).join(', ') + '</p><label for="nv">Estou estudando para</label><select id="nv">' + inscs().map(function (i, k) { return '<option value="' + k + '"' + (i.c === S.concurso && i.n === S.nivel ? ' selected' : '') + '>' + esc(rotulo(i)) + '</option>'; }).join('') + '</select><p class="small mut">Muda os tópicos, questões, simulado e apostilas. Seu progresso é mantido.</p><a class="btn sm" href="#/cadastro">✎ Editar cadastro / adicionar nível</a></div><div class="card"><h3 style="margin-top:0">Minha meta</h3><label for="mn">Meta de acertos na prova (%) - a nota mínima é 50%</label><input type="number" id="mn" min="50" max="100" value="' + metaNota() + '"><label for="mq">Questões por dia</label><input type="number" id="mq" min="5" max="200" value="' + (S.metaq || 30) + '"></div><div class="card"><label for="meta">Meta semanal (etapas concluídas por semana)</label><input type="number" id="meta" min="1" max="40" value="' + S.meta + '"></div>' +
+      '<div class="card"><h3 style="margin-top:0">Backup do progresso</h3><p class="small mut">O progresso desta conta fica salvo neste aparelho. Para levar a outro (celular ↔ PC), exporte e importe o arquivo.</p><div class="row"><button class="btn" id="exp">⬇ Exportar</button><label class="btn" for="imp" style="margin:0">⬆ Importar</label><input type="file" id="imp" accept=".json,application/json" hidden></div></div>' +
       '<div class="card"><h3 style="margin-top:0">Apostilas em PDF</h3><div class="res">' + mats().map(function (m) { return '<a target="_blank" rel="noopener" href="pdf/apostila-' + S.nivel + '-' + m.id + '.pdf">' + esc(m.nome) + '</a>'; }).join('') + '<a target="_blank" rel="noopener" href="pdf/apostila-' + S.nivel + '-completa.pdf"><b>Apostila completa (' + esc(nvInfo().nome) + ')</b></a></div></div>' +
-      '<div class="card"><h3 style="margin-top:0">Zerar tudo</h3><button class="btn" id="rst" style="color:var(--bad)">Apagar progresso deste aparelho</button></div>';
+      '<div class="card"><h3 style="margin-top:0">Zerar tudo</h3><button class="btn" id="rst" style="color:var(--bad)">Apagar o progresso desta conta</button></div>';
     document.getElementById('nv').onchange = function (e) { var i = inscs()[+e.target.value]; setAlvo(i.c, i.n); save(); toast('Estudando: ' + rotulo(i)); vConfig(); };
     document.getElementById('mn').onchange = function (e) { S.metaNota = Math.min(100, Math.max(50, +e.target.value || 70)); save(); toast('Meta salva'); };
     document.getElementById('mq').onchange = function (e) { S.metaq = Math.min(200, Math.max(5, +e.target.value || 30)); save(); toast('Meta salva'); };
@@ -680,7 +829,7 @@
       r.onload = function () { try { var o = JSON.parse(r.result); if (typeof o !== 'object' || !o) throw 0; S = Object.assign(defaults(), o); save(); toast('Progresso importado'); route(); } catch (x) { toast('Arquivo inválido'); } };
       r.readAsText(f);
     };
-    document.getElementById('rst').onclick = function () { ask('Apagar TODO o progresso deste aparelho? Isso não pode ser desfeito.', function () { S = defaults(); save(); saveSim(null); toast('Progresso apagado'); route(); }); };
+    document.getElementById('rst').onclick = function () { ask('Apagar TODO o progresso desta conta? Isso não pode ser desfeito.', function () { S = defaults(); save(); saveSim(null); toast('Progresso apagado'); route(); }); };
   }
 
   /* ---------- Início ---------- */
@@ -690,6 +839,7 @@
     navigator.serviceWorker.addEventListener('controllerchange', function () { if (tinhaSW && !recarregou) { recarregou = true; location.reload(); } });
     navigator.serviceWorker.register('sw.js').then(function (r) { return r.update(); }).catch(function () { });
   }
+  (function () { var sid = sessaoId(); if (sid && usuarios().some(function (u) { return u.id === sid; })) { UID = sid; carregar(); applyTheme(); } })();
   route();
   confirmarNivel();
 })();
