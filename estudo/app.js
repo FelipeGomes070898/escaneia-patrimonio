@@ -72,10 +72,12 @@
     return { login: raw.toLowerCase() };
   }
   function mostraLogin(l) { l = String(l); if (l.indexOf('tel:') !== 0) return l; var d = l.slice(4); return '(' + d.slice(0, 2) + ') ' + (d.length === 11 ? d.slice(2, 7) + '-' + d.slice(7) : d.slice(2, 6) + '-' + d.slice(6)); }
-  function migraDono() {
-    var l = usuarios(); if (l.length && !l.some(function (u) { return u.dono; })) { l.slice().sort(function (a, b) { return a.criado - b.criado; })[0].dono = true; salvaUsuarios(l); }
+  /* Dono: só quem digita o código secreto (guardado no site apenas como hash). Vale por conta, neste aparelho. */
+  function codigoDonoOk(cod) {
+    var a = window.ADMIN; if (!a || !a.hash) return false;
+    return sha256hex(a.sal + String(cod || '').toUpperCase().replace(/[^A-Z0-9]/g, '')) === a.hash;
   }
-  function ehDono() { var u = usuarioAtual(); return !!(u && u.dono); }
+  function ehDono() { return !!(UID && S.donoOk === true); }
   function usuarioAtual() { return usuarios().filter(function (u) { return u.id === UID; })[0] || null; }
   function sessaoId() { var v = ''; try { v = sessionStorage.getItem('estudo.sessao') || ''; } catch (e) { } return v || lsGet('estudo.sessao') || ''; }
   function iniciaSessao(id, lembrar) {
@@ -348,7 +350,7 @@
       if (us.some(function (x) { return x.login === login; })) return erro('Já existe uma conta com ' + (loginTipo === 'celular' ? 'esse celular' : loginTipo === 'email' ? 'esse e-mail' : 'esse usuário') + ' neste aparelho. Entre na conta ou use outro.');
       var sal = novoSal();
       return hashSenha(pw, sal).then(function (hh) {
-        var nu = { dono: us.length === 0, id: 'u' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36), nome: nome, login: login, sal: sal, h: hh, criado: Date.now() };
+        var nu = { id: 'u' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36), nome: nome, login: login, sal: sal, h: hh, criado: Date.now() };
         us.push(nu); salvaUsuarios(us);
         if (us.length === 1 && lsGet(LS_LEGADO)) { /* primeira conta do aparelho: adota o progresso de antes */
           lsSet('estudo.v1.' + nu.id, lsGet(LS_LEGADO)); lsSet('estudo.v1.legado-backup', lsGet(LS_LEGADO)); lsDel(LS_LEGADO);
@@ -363,7 +365,7 @@
   function exportaConta() {
     var u = usuarioAtual(); if (!u) return;
     save();
-    var blob = new Blob([JSON.stringify({ tipo: 'rota-conta', versao: 1, exportado: Date.now(), user: u, dados: S })], { type: 'application/json' }), a = document.createElement('a');
+    var blob = new Blob([JSON.stringify({ tipo: 'rota-conta', versao: 1, exportado: Date.now(), user: { id: u.id, nome: u.nome, login: u.login, sal: u.sal, h: u.h, criado: u.criado }, dados: Object.assign({}, S, { donoOk: false }) })], { type: 'application/json' }), a = document.createElement('a');
     a.href = URL.createObjectURL(blob); a.download = 'conta-rota-do-concurso-' + today() + '.json'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
   }
   function importaConta(file) {
@@ -377,8 +379,8 @@
       var us = usuarios();
       if (us.some(function (x) { return x.login === u.login; })) { loginModo = 'entrar'; loginPre = mostraLogin(u.login); loginMsgOk = false; return vLogin('Já existe uma conta com esse login neste aparelho. Entre com a sua senha.'); }
       var id = us.some(function (x) { return x.id === u.id; }) || !u.id ? 'u' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36) : u.id;
-      us.push({ id: id, nome: String(u.nome).slice(0, 60), login: String(u.login), sal: String(u.sal), h: String(u.h), criado: u.criado || Date.now(), dono: us.length === 0 });
-      salvaUsuarios(us); lsSet('estudo.v1.' + id, JSON.stringify(o.dados));
+      us.push({ id: id, nome: String(u.nome).slice(0, 60), login: String(u.login), sal: String(u.sal), h: String(u.h), criado: u.criado || Date.now() });
+      o.dados.donoOk = false; salvaUsuarios(us); lsSet('estudo.v1.' + id, JSON.stringify(o.dados));
       loginModo = 'entrar'; loginPre = mostraLogin(u.login); loginMsgOk = true; vLogin('Conta importada! Entre com a sua senha.');
     };
     r.onerror = function () { fail('Não consegui ler o arquivo.'); };
@@ -429,24 +431,36 @@
     return { u: u, d: d, a: a, tp: tp, online: online, hoje: hoje, noSiteHoje: noSiteHoje, sem: sem, tries: tries, hits: hits, acc: pct(hits, tries), feitos: feitos, sims: sims, media: media, abertos: abertos, onde: onde, insc: ((d.perfil && d.perfil.insc) || []).map(rotulo) };
   }
   function pillOn(r) { return r.online ? '<span class="pill ok">🟢 online agora</span>' : '<span class="pill">⚪ ' + (r.a.ping ? 'visto ' + ha(r.a.ping) : 'nunca entrou') + '</span>'; }
+  function vDonoGate(destino) {
+    var h = '<h1>Área do dono</h1><div class="card"><p style="margin:0 0 .5rem">Esta área é restrita ao dono do site. Digite o código do dono para abrir.</p><form id="dg" novalidate><label for="dg-cod">Código do dono</label><input type="password" id="dg-cod" autocomplete="off" autocapitalize="characters" placeholder="XXXX-XXXX-XXXX-XXXX"><div id="dg-err" class="small" role="alert" style="color:var(--bad);min-height:1.2em;margin:.4rem 0"></div><div class="row"><button type="submit" class="btn pri">Abrir</button><a class="btn" href="#/">Voltar</a></div></form></div>';
+    $app.innerHTML = h;
+    document.getElementById('dg').onsubmit = function (e) {
+      e.preventDefault();
+      var er = document.getElementById('dg-err');
+      if (!codigoDonoOk(document.getElementById('dg-cod').value)) { er.textContent = 'Código incorreto.'; return; }
+      S.donoOk = true; save(); toast('Área do dono liberada nesta conta'); route();
+    };
+  }
   function vDono() {
-    if (!ehDono()) return go('#/');
+    if (!ehDono()) return vDonoGate();
     var us = usuarios().map(resumoUsuario);
     var h = '<h1>Área do dono</h1><div class="aviso"><b>Escopo desta tela:</b> mostra as contas criadas <b>neste aparelho</b>. O site não tem servidor, então não dá para ver quem acessa de outros celulares ou computadores. Veja no README como ligar um servidor para enxergar todos.</div>';
     h += '<div class="grid c3" style="margin-top:.7rem"><div class="card"><div class="small mut">Contas neste aparelho</div><div class="stat">' + us.length + '</div></div><div class="card"><div class="small mut">Online agora</div><div class="stat">' + us.filter(function (r) { return r.online; }).length + '</div></div><div class="card"><div class="small mut">Estudaram hoje</div><div class="stat">' + us.filter(function (r) { return r.hoje > 0; }).length + '</div></div></div>';
     h += '<h2>Usuários</h2>';
     us.sort(function (x, y) { return (y.a.ping || 0) - (x.a.ping || 0); }).forEach(function (r) {
       var u = r.u;
-      h += '<a class="card" style="display:block;color:inherit;text-decoration:none" href="#/dono/' + u.id + '"><div class="row"><b>' + esc(u.nome) + '</b>' + (u.dono ? '<span class="pill warn">dono</span>' : '') + (u.id === UID ? '<span class="pill">você</span>' : '') + '<span class="sp"></span>' + pillOn(r) + '</div>' +
+      h += '<a class="card" style="display:block;color:inherit;text-decoration:none" href="#/dono/' + u.id + '"><div class="row"><b>' + esc(u.nome) + '</b>' + (u.id === UID ? '<span class="pill">você</span>' : '') + '<span class="sp"></span>' + pillOn(r) + '</div>' +
         '<div class="small mut">' + esc(TIPOS[tipoDoLogin(u.login)].nome.toLowerCase() + ': ' + mostraLogin(u.login)) + (r.insc.length ? ' · ' + esc(r.insc.join(', ')) : '') + '</div>' +
         '<div class="grid c3" style="margin-top:.5rem;gap:.4rem"><div><div class="small mut">Última entrada</div><b>' + fmtDT(r.a.ultima) + '</b></div><div><div class="small mut">Estudou hoje</div><b>' + fmtDur(r.hoje) + '</b></div><div><div class="small mut">Total estudando</div><b>' + fmtDur(r.tp.estudo) + '</b></div></div>' +
         '<div class="small mut" style="margin-top:.4rem">' + r.a.entradas + ' entrada(s) · ' + r.feitos + ' tópico(s) concluído(s) · ' + (r.tries ? 'acerto ' + r.acc + '%' : 'sem questões') + (r.onde ? ' · estudando: ' + esc(r.onde) : '') + '</div></a>';
     });
+    h += '<p class="noprint" style="margin-top:1rem"><button class="btn sm" id="dn-lock">🔒 Bloquear a área do dono neste aparelho</button></p>';
     $app.innerHTML = h;
+    document.getElementById('dn-lock').onclick = function () { S.donoOk = false; save(); toast('Área do dono bloqueada'); go('#/'); };
     timerId = setInterval(function () { if ((location.hash || '') === '#/dono') vDono(); }, 5000);
   }
   function vDonoUser(id) {
-    if (!ehDono()) return go('#/');
+    if (!ehDono()) return vDonoGate();
     var u = usuarios().filter(function (x) { return x.id === id; })[0]; if (!u) return go('#/dono');
     var r = resumoUsuario(u), tp = r.tp, h = '<p><a href="#/dono">← Área do dono</a></p><h1>' + esc(u.nome) + '</h1><div class="row">' + pillOn(r) + '<span class="small mut">' + esc(TIPOS[tipoDoLogin(u.login)].nome.toLowerCase() + ': ' + mostraLogin(u.login)) + ' · conta criada em ' + brDate(iso(new Date(u.criado))) + '</span></div>';
     h += '<div class="grid c3" style="margin-top:.6rem"><div class="card"><div class="small mut">Última entrada</div><div class="stat" style="font-size:1.2rem">' + fmtDT(r.a.ultima) + '</div><div class="small mut">' + r.a.entradas + ' entrada(s)</div></div><div class="card"><div class="small mut">Estudando (hoje / 7 dias)</div><div class="stat" style="font-size:1.2rem">' + fmtDur(r.hoje) + ' / ' + fmtDur(r.sem) + '</div><div class="small mut">total ' + fmtDur(tp.estudo) + '</div></div><div class="card"><div class="small mut">Tempo no site (total)</div><div class="stat" style="font-size:1.2rem">' + fmtDur(tp.site) + '</div><div class="small mut">hoje no site: ' + fmtDur(r.noSiteHoje) + ' · inclui telas fora do estudo</div></div></div>';
@@ -1165,7 +1179,6 @@
     navigator.serviceWorker.addEventListener('controllerchange', function () { if (tinhaSW && !recarregou) { recarregou = true; location.reload(); } });
     navigator.serviceWorker.register('sw.js').then(function (r) { return r.update(); }).catch(function () { });
   }
-  migraDono();
   (function () { var sid = sessaoId(); if (sid && usuarios().some(function (u) { return u.id === sid; })) { UID = sid; carregar(); guardaRetomar(); applyTheme(); iniciaVisita(); } desenhaPill(); })();
   route();
   confirmarNivel();

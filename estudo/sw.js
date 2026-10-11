@@ -1,7 +1,7 @@
 /* Cache para uso offline (rede primeiro, para nunca ficar preso a uma versão antiga). Troque a versão ao alterar arquivos. */
-var CACHE = 'rota-concurso-v16';
+var CACHE = 'rota-concurso-v17';
 var ARQUIVOS = ['./', 'index.html', 'style.css', 'app.js', 'manifest.json', 'icon.svg',
-  'data/core.js', 'data/portugues.js', 'data/logica.js', 'data/legislacao.js', 'data/especificos.js', 'data/gerais.js', 'data/superior.js', 'data/coment-portugues.js', 'data/coment-logica.js', 'data/coment-legislacao.js', 'data/coment-especificos.js', 'data/coment-gerais.js'];
+  'data/admin-config.js', 'data/core.js', 'data/portugues.js', 'data/logica.js', 'data/legislacao.js', 'data/especificos.js', 'data/gerais.js', 'data/superior.js', 'data/coment-portugues.js', 'data/coment-logica.js', 'data/coment-legislacao.js', 'data/coment-especificos.js', 'data/coment-gerais.js'];
 self.addEventListener('install', function (e) { e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(ARQUIVOS); }).then(function () { return self.skipWaiting(); })); });
 self.addEventListener('activate', function (e) {
   e.waitUntil(caches.keys().then(function (ks) { return Promise.all(ks.filter(function (k) { return k !== CACHE; }).map(function (k) { return caches.delete(k); })); }).then(function () { return self.clients.claim(); }));
