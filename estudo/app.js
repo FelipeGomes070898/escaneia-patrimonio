@@ -77,7 +77,16 @@
     var a = window.ADMIN; if (!a || !a.hash) return false;
     return sha256hex(a.sal + String(cod || '').toUpperCase().replace(/[^A-Z0-9]/g, '')) === a.hash;
   }
-  function ehDono() { return !!(UID && S.donoOk === true); }
+  /* Papéis: dono (e-mails autorizados, guardados como hash) > colaborador (liberado pelo dono) > aluno (padrão) */
+  function loginEhDono(login) { var a = window.ADMIN; if (!a || !a.donos || !login) return false; return a.donos.indexOf(sha256hex(String(a.salEmail) + String(login).trim().toLowerCase())) >= 0; }
+  function papelDe(u) { if (!u) return 'aluno'; return loginEhDono(u.login) ? 'dono' : (u.papel === 'colaborador' ? 'colaborador' : 'aluno'); }
+  function papelAtual() { return papelDe(usuarioAtual()); }
+  /* menu da área: aparece para o dono e para colaboradores */
+  function mostraAreaDono() { var p = papelAtual(); return !!UID && (p === 'dono' || p === 'colaborador'); }
+  /* acesso liberado: dono precisa também do código (o e-mail do login não é verificado); colaborador foi liberado pelo dono */
+  function ehDono() { var p = papelAtual(); return !!UID && ((p === 'dono' && S.donoOk === true) || p === 'colaborador'); }
+  function ehDonoPleno() { return papelAtual() === 'dono' && ehDono(); }
+  var PAPEL_NOME = { dono: 'Dono', colaborador: 'Colaborador', aluno: 'Aluno' };
   function usuarioAtual() { return usuarios().filter(function (u) { return u.id === UID; })[0] || null; }
   function sessaoId() { var v = ''; try { v = sessionStorage.getItem('estudo.sessao') || ''; } catch (e) { } return v || lsGet('estudo.sessao') || ''; }
   function iniciaSessao(id, lembrar) {
@@ -127,7 +136,7 @@
     }
     return new Promise(function (ok) { var h = sal + unescape(encodeURIComponent(senha)); for (var i = 0; i < 5000; i++) h = sha256hex(h); ok('f:' + h); });
   }
-  function senhaConfere(u, senha) { return hashSenha(senha, u.sal, String(u.h).charAt(0)).then(function (h) { return h != null && h === u.h; }); }
+  function senhaConfere(u, senha) { return hashSenha(senha, u.sal, String(u.h).charAt(0)).then(function (h) { return h != null && h === u.h; }).catch(function () { return false; }); }
 
   /* ---------- Tempo de estudo: só conta com a página visível, com foco e com atividade ---------- */
   var T = { conta: false, ativo: false, input: Date.now(), tick: Date.now(), n: 0, m: null, t: null, estudo: false, sim: null, sess: null, motivo: '' };
@@ -256,7 +265,7 @@
     var cur = h.split('?')[0], chip = document.getElementById('nvchip'), ni = nvInfo();
     if (chip) { chip.hidden = !ni; chip.textContent = ni && S.concurso ? '🎓 ' + concInfo(S.concurso).nome + ' · ' + NV_CURTO[S.nivel] : ''; chip.title = 'Seu nível cadastrado. Toque para trocar.'; }
     function on(href) { if (href === '#/') return cur === '#/' || cur === ''; if (href === '#/mais') return ['#/mais', '#/erros', '#/revisao', '#/cronograma', '#/edital', '#/config', '#/conta', '#/resumo', '#/dono'].indexOf(cur) >= 0 || cur.indexOf('#/dono') === 0; return cur.indexOf(href) === 0 || (href === '#/trilha' && /^#\/(materia|aula)/.test(cur)) || (href === '#/praticar' && cur.indexOf('#/quiz') === 0); }
-    var SIDE2 = ehDono() ? SIDE.concat([['#/dono', 'Dono', '🛡️']]) : SIDE;
+    var SIDE2 = mostraAreaDono() ? SIDE.concat([['#/dono', 'Dono', '🛡️']]) : SIDE;
     document.getElementById('sidenav').innerHTML = SIDE2.map(function (n) { return '<a href="' + n[0] + '" class="' + (on(n[0]) ? 'on' : '') + '">' + n[1] + '</a>'; }).join('');
     document.getElementById('bottomnav').innerHTML = NAV.map(function (n) { return '<a href="' + n[0] + '" class="' + (on(n[0]) ? 'on' : '') + '"><span class="ic">' + n[2] + '</span>' + n[1] + '</a>'; }).join('');
   }
@@ -389,12 +398,22 @@
 
   function vConta() {
     var u = usuarioAtual(); if (!u) return go('#/');
-    var h = '<h1>Minha conta</h1><div class="card"><div class="row"><b>' + esc(u.nome) + '</b><span class="sp"></span><span class="small mut">' + TIPOS[tipoDoLogin(u.login)].nome.toLowerCase() + ': ' + esc(mostraLogin(u.login)) + '</span></div><p class="small mut" style="margin:.3rem 0">Conta criada em ' + brDate(iso(new Date(u.criado))) + '. Os dados desta conta (progresso, histórico de simulados, caderno de erros) ficam separados dos das outras contas deste aparelho.</p>' +
+    var h = '<h1>Minha conta</h1><div class="card"><div class="row"><b>' + esc(u.nome) + '</b><span class="sp"></span><span class="small mut">' + TIPOS[tipoDoLogin(u.login)].nome.toLowerCase() + ': ' + esc(mostraLogin(u.login)) + ' · função: ' + PAPEL_NOME[papelDe(u)] + '</span></div><p class="small mut" style="margin:.3rem 0">Conta criada em ' + brDate(iso(new Date(u.criado))) + '. Os dados desta conta (progresso, histórico de simulados, caderno de erros) ficam separados dos das outras contas deste aparelho.</p>' +
       '<div class="row"><button class="btn pri" id="ct-sair">Sair da conta</button></div></div>' +
       '<div class="card"><h3 style="margin-top:0">Usar esta conta em outro aparelho</h3><p class="small mut">Exporte a conta (cadastro, senha e todo o progresso) e, no outro celular ou computador, toque em <b>Importar conta</b> na tela de entrada. O arquivo contém a sua senha criptografada e o seu histórico: guarde com cuidado.</p><button class="btn" id="ct-exp">📤 Exportar minha conta</button></div>' +
+      '<div class="card"><h3 style="margin-top:0">Alterar login</h3><p class="small mut">Troque o celular, e-mail ou usuário que você usa para entrar (o progresso continua).</p><label for="ct-lg">Novo login</label><input type="text" id="ct-lg" autocapitalize="none" placeholder="Ex.: seu@email.com"><label for="ct-lgpw">Senha atual</label><input type="password" id="ct-lgpw" autocomplete="current-password"><div id="ct-lgerr" class="small" role="alert" style="color:var(--bad);min-height:1.2em;margin:.4rem 0"></div><button class="btn" id="ct-lgbtn">Salvar novo login</button></div>' +
       '<div class="card"><h3 style="margin-top:0">Alterar senha</h3><label for="ct-at">Senha atual</label><input type="password" id="ct-at" autocomplete="current-password"><label for="ct-nv">Nova senha (mínimo 6)</label><input type="password" id="ct-nv" autocomplete="new-password"><label for="ct-nv2">Repita a nova senha</label><input type="password" id="ct-nv2" autocomplete="new-password"><div id="ct-err" class="small" role="alert" style="min-height:1.2em;margin:.4rem 0"></div><button class="btn" id="ct-pw">Salvar nova senha</button></div>' +
       '<div class="card"><h3 style="margin-top:0">Excluir conta</h3><p class="small mut">Apaga esta conta e todo o progresso e histórico dela deste aparelho. Não dá para desfazer.</p><button class="btn" id="ct-del" style="color:var(--bad)">Excluir minha conta</button></div>';
     $app.innerHTML = h;
+    document.getElementById('ct-lgbtn').onclick = function () {
+      var raw = document.getElementById('ct-lg').value, er = document.getElementById('ct-lgerr'), tipo = raw.indexOf('@') > 0 ? 'email' : pareceCelular(raw) ? 'celular' : 'usuario', vi = validaIdentificador(tipo, raw);
+      if (vi.erro) { er.textContent = vi.erro; return; }
+      if (usuarios().some(function (x) { return x.login === vi.login && x.id !== u.id; })) { er.textContent = 'Já existe outra conta com esse login neste aparelho.'; return; }
+      senhaConfere(u, document.getElementById('ct-lgpw').value).then(function (ok) {
+        if (!ok) { er.textContent = 'A senha atual está incorreta.'; return; }
+        var l = usuarios(); l.forEach(function (x) { if (x.id === u.id) x.login = vi.login; }); salvaUsuarios(l); toast('Login alterado'); vConta();
+      });
+    };
     document.getElementById('ct-exp').onclick = function () { exportaConta(); toast('Arquivo da conta salvo'); };
     document.getElementById('ct-sair').onclick = function () { encerraSessao(); go('#/'); route(); };
     document.getElementById('ct-pw').onclick = function () {
@@ -431,14 +450,48 @@
     return { u: u, d: d, a: a, tp: tp, online: online, hoje: hoje, noSiteHoje: noSiteHoje, sem: sem, tries: tries, hits: hits, acc: pct(hits, tries), feitos: feitos, sims: sims, media: media, abertos: abertos, onde: onde, insc: ((d.perfil && d.perfil.insc) || []).map(rotulo) };
   }
   function pillOn(r) { return r.online ? '<span class="pill ok">🟢 online agora</span>' : '<span class="pill">⚪ ' + (r.a.ping ? 'visto ' + ha(r.a.ping) : 'nunca entrou') + '</span>'; }
-  function vDonoGate(destino) {
-    var h = '<h1>Área do dono</h1><div class="card"><p style="margin:0 0 .5rem">Esta área é restrita ao dono do site. Digite o código do dono para abrir.</p><form id="dg" novalidate><label for="dg-cod">Código do dono</label><input type="password" id="dg-cod" autocomplete="off" autocapitalize="characters" placeholder="XXXX-XXXX-XXXX-XXXX"><div id="dg-err" class="small" role="alert" style="color:var(--bad);min-height:1.2em;margin:.4rem 0"></div><div class="row"><button type="submit" class="btn pri">Abrir</button><a class="btn" href="#/">Voltar</a></div></form></div>';
+  function vDonoGate() {
+    if (papelAtual() !== 'dono') {
+      $app.innerHTML = '<h1>Área do dono</h1><div class="card"><p style="margin:0">Esta área é restrita ao dono do site.</p><p style="margin:.6rem 0 0"><a class="btn" href="#/">Voltar</a></p></div>'; return;
+    }
+    var h = '<h1>Área do dono</h1><div class="card"><p style="margin:0 0 .5rem">Conta de dono reconhecida. Como o e-mail do login não é verificado, digite também o código do dono para abrir.</p><form id="dg" novalidate><label for="dg-cod">Código do dono</label><input type="password" id="dg-cod" autocomplete="off" autocapitalize="characters" placeholder="XXXX-XXXX-XXXX-XXXX"><div id="dg-err" class="small" role="alert" style="color:var(--bad);min-height:1.2em;margin:.4rem 0"></div><div class="row"><button type="submit" class="btn pri">Abrir</button><a class="btn" href="#/">Voltar</a></div></form></div>';
     $app.innerHTML = h;
     document.getElementById('dg').onsubmit = function (e) {
       e.preventDefault();
       var er = document.getElementById('dg-err');
       if (!codigoDonoOk(document.getElementById('dg-cod').value)) { er.textContent = 'Código incorreto.'; return; }
-      S.donoOk = true; save(); toast('Área do dono liberada nesta conta'); route();
+      S.donoOk = true; save(); toast('Área do dono liberada'); route();
+    };
+  }
+  /* Pessoas e funções: o dono adiciona contas e define quem é aluno ou colaborador (neste aparelho) */
+  function blocoPessoas() {
+    var us = usuarios();
+    var h = '<h2>Pessoas e funções</h2><div class="card"><p class="small mut" style="margin:0 0 .5rem"><b>Aluno</b> estuda normalmente. <b>Colaborador</b> também abre esta área (sem o código). <b>Dono</b> são só os e-mails autorizados. As contas e funções valem <b>neste aparelho</b>.</p>' +
+      us.map(function (u) {
+        var p = papelDe(u);
+        return '<div class="row" style="padding:.4rem 0;border-bottom:1px solid var(--line)"><div style="flex:1;min-width:0"><b>' + esc(u.nome) + '</b><div class="small mut">' + esc(mostraLogin(u.login)) + '</div></div>' +
+          (p === 'dono' ? '<span class="pill warn">Dono</span>' : '<select data-papel="' + u.id + '" style="width:auto"><option value="aluno"' + (p === 'aluno' ? ' selected' : '') + '>Aluno</option><option value="colaborador"' + (p === 'colaborador' ? ' selected' : '') + '>Colaborador</option></select><button class="btn sm" data-rm="' + u.id + '" aria-label="Remover conta">🗑</button>') + '</div>';
+      }).join('') +
+      '<details style="margin-top:.7rem"><summary style="cursor:pointer;font-weight:700;color:var(--pri)">+ Adicionar pessoa</summary><form id="ad" novalidate><label for="ad-nome">Nome</label><input type="text" id="ad-nome" maxlength="60"><label for="ad-user">Celular, e-mail ou usuário (será o login)</label><input type="text" id="ad-user" maxlength="80" autocapitalize="none"><label for="ad-pw">Senha inicial (mínimo 6)</label><input type="text" id="ad-pw" autocomplete="off"><label for="ad-papel">Função</label><select id="ad-papel"><option value="aluno">Aluno</option><option value="colaborador">Colaborador</option></select><div id="ad-err" class="small" role="alert" style="color:var(--bad);min-height:1.2em;margin:.4rem 0"></div><button type="submit" class="btn pri">Criar conta</button></form></details></div>';
+    return h;
+  }
+  function ligaPessoas() {
+    Array.prototype.forEach.call($app.querySelectorAll('[data-papel]'), function (sel) { sel.onchange = function () { var l = usuarios(); l.forEach(function (u) { if (u.id === sel.getAttribute('data-papel')) u.papel = sel.value; }); salvaUsuarios(l); toast('Função atualizada'); }; });
+    Array.prototype.forEach.call($app.querySelectorAll('[data-rm]'), function (b) { b.onclick = function () { var id = b.getAttribute('data-rm'), u = usuarios().filter(function (x) { return x.id === id; })[0]; if (!u) return; ask('Remover a conta de ' + u.nome + ' e todo o progresso dela neste aparelho? Não dá para desfazer.', function () { salvaUsuarios(usuarios().filter(function (x) { return x.id !== id; })); lsDel('estudo.v1.' + id); lsDel('estudo.sim.' + id); toast('Conta removida'); vDono(); }); }; });
+    var f = document.getElementById('ad'); if (!f) return;
+    f.onsubmit = function (e) {
+      e.preventDefault();
+      var er = document.getElementById('ad-err'), nome = document.getElementById('ad-nome').value.replace(/\s+/g, ' ').trim(), raw = document.getElementById('ad-user').value, pw = document.getElementById('ad-pw').value, papel = document.getElementById('ad-papel').value;
+      var tipo = raw.indexOf('@') > 0 ? 'email' : pareceCelular(raw) ? 'celular' : 'usuario', vi = validaIdentificador(tipo, raw);
+      if (nome.length < 2) { er.textContent = 'Digite o nome.'; return; }
+      if (vi.erro) { er.textContent = vi.erro; return; }
+      if (pw.length < 6) { er.textContent = 'A senha inicial precisa ter pelo menos 6 caracteres.'; return; }
+      var us = usuarios(); if (us.some(function (x) { return x.login === vi.login; })) { er.textContent = 'Já existe uma conta com esse login neste aparelho.'; return; }
+      var sal = novoSal();
+      hashSenha(pw, sal).then(function (hh) {
+        var l = usuarios(); l.push({ id: 'u' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36), nome: nome, login: vi.login, sal: sal, h: hh, criado: Date.now(), papel: papel === 'colaborador' ? 'colaborador' : 'aluno' });
+        salvaUsuarios(l); toast('Conta criada. Passe o login e a senha para a pessoa.'); vDono();
+      });
     };
   }
   function vDono() {
@@ -454,9 +507,11 @@
         '<div class="grid c3" style="margin-top:.5rem;gap:.4rem"><div><div class="small mut">Última entrada</div><b>' + fmtDT(r.a.ultima) + '</b></div><div><div class="small mut">Estudou hoje</div><b>' + fmtDur(r.hoje) + '</b></div><div><div class="small mut">Total estudando</div><b>' + fmtDur(r.tp.estudo) + '</b></div></div>' +
         '<div class="small mut" style="margin-top:.4rem">' + r.a.entradas + ' entrada(s) · ' + r.feitos + ' tópico(s) concluído(s) · ' + (r.tries ? 'acerto ' + r.acc + '%' : 'sem questões') + (r.onde ? ' · estudando: ' + esc(r.onde) : '') + '</div></a>';
     });
-    h += '<p class="noprint" style="margin-top:1rem"><button class="btn sm" id="dn-lock">🔒 Bloquear a área do dono neste aparelho</button></p>';
+    if (ehDonoPleno()) h += blocoPessoas();
+    h += '<p class="noprint" style="margin-top:1rem">' + (papelAtual() === 'dono' ? '<button class="btn sm" id="dn-lock">🔒 Bloquear a área do dono neste aparelho</button>' : '') + '</p>';
     $app.innerHTML = h;
-    document.getElementById('dn-lock').onclick = function () { S.donoOk = false; save(); toast('Área do dono bloqueada'); go('#/'); };
+    var lk = document.getElementById('dn-lock'); if (lk) lk.onclick = function () { S.donoOk = false; save(); toast('Área do dono bloqueada'); go('#/'); };
+    if (ehDonoPleno()) ligaPessoas();
     timerId = setInterval(function () { if ((location.hash || '') === '#/dono') vDono(); }, 5000);
   }
   function vDonoUser(id) {
@@ -1149,7 +1204,7 @@
 
   /* ---------- Mais / Config ---------- */
   function vMais() {
-    $app.innerHTML = '<h1>Mais</h1><div class="card list">' + [['#/erros', '📓 Caderno de erros'], ['#/revisao', '🔁 Revisão espaçada'], ['#/cronograma', '📅 Cronograma'], ['#/resumo', '📚 Resumo do que estudei'], ['#/edital', '📄 Edital e regras da prova'], ['#/conta', '👤 Minha conta e sair']].concat(ehDono() ? [['#/dono', '🛡️ Área do dono']] : []).concat([ ['#/config', '⚙️ Ajustes e backup']]).map(function (x) { return '<a class="item" href="' + x[0] + '">' + x[1] + '</a>'; }).join('') + '</div>';
+    $app.innerHTML = '<h1>Mais</h1><div class="card list">' + [['#/erros', '📓 Caderno de erros'], ['#/revisao', '🔁 Revisão espaçada'], ['#/cronograma', '📅 Cronograma'], ['#/resumo', '📚 Resumo do que estudei'], ['#/edital', '📄 Edital e regras da prova'], ['#/conta', '👤 Minha conta e sair']].concat(mostraAreaDono() ? [['#/dono', '🛡️ Área do dono']] : []).concat([ ['#/config', '⚙️ Ajustes e backup']]).map(function (x) { return '<a class="item" href="' + x[0] + '">' + x[1] + '</a>'; }).join('') + '</div>';
   }
   function vConfig() {
     $app.innerHTML = '<h1>Ajustes</h1><div class="card"><h3 style="margin-top:0">Meu cadastro</h3><p class="small mut" style="margin:0 0 .4rem">Conta: ' + esc(mostraLogin((usuarioAtual() || {}).login || '')) + ' · <a href="#/conta">Minha conta / sair</a></p><p class="small">' + esc(S.perfil.nome) + ' · ' + inscs().map(rotulo).map(esc).join(', ') + '</p><label for="nv">Estou estudando para</label><select id="nv">' + inscs().map(function (i, k) { return '<option value="' + k + '"' + (i.c === S.concurso && i.n === S.nivel ? ' selected' : '') + '>' + esc(rotulo(i)) + '</option>'; }).join('') + '</select><p class="small mut">Muda os tópicos, questões, simulado e apostilas. Seu progresso é mantido.</p><a class="btn sm" href="#/cadastro">✎ Editar cadastro / adicionar nível</a></div><div class="card"><h3 style="margin-top:0">Minha meta</h3><label for="mn">Meta de acertos na prova (%) - a nota mínima é 50%</label><input type="number" id="mn" min="50" max="100" value="' + metaNota() + '"><label for="mq">Questões por dia</label><input type="number" id="mq" min="5" max="200" value="' + (S.metaq || 30) + '"></div><div class="card"><label for="meta">Meta semanal (etapas concluídas por semana)</label><input type="number" id="meta" min="1" max="40" value="' + S.meta + '"></div>' +
