@@ -128,7 +128,7 @@
   function senhaConfere(u, senha) { return hashSenha(senha, u.sal, String(u.h).charAt(0)).then(function (h) { return h != null && h === u.h; }); }
 
   /* ---------- Tempo de estudo: só conta com a página visível, com foco e com atividade ---------- */
-  var T = { ativo: false, input: Date.now(), tick: Date.now(), n: 0, m: null, t: null, estudo: false, sim: null, sess: null, motivo: '' };
+  var T = { conta: false, ativo: false, input: Date.now(), tick: Date.now(), n: 0, m: null, t: null, estudo: false, sim: null, sess: null, motivo: '' };
   var ESTUDO_ROTAS = ['aula', 'materia', 'quiz', 'simulado', 'simrev', 'erros', 'revisao', 'resumo', 'praticar', 'trilha'];
   function idleMax() { return (window.ESTUDO_IDLE || 180) * 1000; } /* parado por 3 min = pausa */
   function tempoDe() { S.tempo = S.tempo || { site: 0, estudo: 0, dias: {}, diasEst: {}, mats: {}, topicos: {}, sessoes: [] }; if (!S.tempo.diasEst) S.tempo.diasEst = Object.assign({}, S.tempo.dias); /* versão antiga: dias só tinha estudo */ return S.tempo; }
@@ -151,7 +151,8 @@
   }
   function tempoTick() {
     var now = Date.now(), d = Math.min((now - T.tick) / 1000, 2.5); T.tick = now;
-    T.motivo = motivoPausa(); var at = !T.motivo;
+    var mp = motivoPausa(), at = !mp; T.motivo = mp || (!T.estudo ? 'fora das telas de estudo (o cronômetro conta só em aulas, questões, simulados e revisões)' : '');
+    T.conta = at && T.estudo;
     if (at !== T.ativo) { T.ativo = at; if (UID) save(); }
     if (UID && S.perfil) {
       atividade().ping = now;
@@ -174,6 +175,7 @@
   document.addEventListener('visibilitychange', function () { if (document.hidden) salvaTudo(); else { T.input = Date.now(); T.tick = Date.now(); tempoTick(); } });
   window.addEventListener('pagehide', salvaTudo); window.addEventListener('blur', salvaTudo);
   window.addEventListener('focus', function () { T.tick = Date.now(); T.input = Date.now(); tempoTick(); });
+  function semanaEst() { var tp = tempoDe(), t = 0; for (var i = 0; i < 7; i++) t += tp.diasEst[addDays(today(), -i)] || 0; return t; }
   function fmtH(sec) { sec = Math.floor(sec); return pad(Math.floor(sec / 3600)) + ':' + pad(Math.floor(sec % 3600 / 60)) + ':' + pad(sec % 60); }
   function fmtDur(sec) { sec = Math.round(sec || 0); if (sec < 60) return sec + ' s'; var h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60); return h ? h + ' h ' + pad(m) + ' min' : m + ' min'; }
   function desenhaPill() {
@@ -181,14 +183,15 @@
     if (!el) {
       el = document.createElement('button'); el.id = 'tpill'; el.type = 'button'; el.setAttribute('aria-live', 'off');
       var top = document.querySelector('.topbar'), chip = document.getElementById('nvchip'); if (top) top.insertBefore(el, chip || null); else document.body.appendChild(el);
-      el.onclick = function () { toast(T.ativo ? 'Cronômetro contando: tempo ativo de hoje no site.' : 'Cronômetro pausado: ' + T.motivo + '.'); };
+      el.onclick = function () { toast(T.conta ? 'Cronômetro contando: tempo de estudo de hoje.' : 'Cronômetro pausado: ' + T.motivo + '.'); };
     }
     var ver = !!UID && !!S.perfil; el.hidden = !ver; if (!ver) return;
-    el.className = 'tpill ' + (T.ativo ? 'on' : 'off');
-    el.innerHTML = '<span class="tp-d"></span><span class="tp-t">' + fmtH(tempoDe().dias[today()] || 0) + '</span>';
-    el.title = T.ativo ? 'Tempo ativo de hoje no site. Pausa sozinho se você sair da página ou ficar parado por 3 minutos.' : 'Cronômetro pausado: ' + T.motivo;
-    var a1 = document.getElementById('tt-hoje'); if (a1) { var tq = tempoDe(); a1.textContent = fmtDur(tq.dias[today()] || 0); document.getElementById('tt-est').textContent = fmtDur(tq.diasEst[today()] || 0); document.getElementById('tt-tot').textContent = fmtDur(tq.estudo); }
-    el.setAttribute('aria-label', (T.ativo ? 'Tempo de hoje: ' : 'Pausado. Tempo de hoje: ') + fmtDur(tempoDe().dias[today()] || 0));
+    var tq = tempoDe(), hojeEst = tq.diasEst[today()] || 0;
+    el.className = 'tpill ' + (T.conta ? 'on' : 'off');
+    el.innerHTML = '<span class="tp-d"></span><span class="tp-t">' + fmtH(hojeEst) + '</span>';
+    el.title = T.conta ? 'Tempo de estudo de hoje. Pausa sozinho se você sair da página ou ficar parado por 3 minutos.' : 'Cronômetro pausado: ' + T.motivo;
+    var a1 = document.getElementById('tt-hoje'); if (a1) { a1.textContent = fmtDur(hojeEst); document.getElementById('tt-sem').textContent = fmtDur(semanaEst()); document.getElementById('tt-tot').textContent = fmtDur(tq.estudo); }
+    el.setAttribute('aria-label', (T.conta ? 'Tempo de estudo de hoje: ' : 'Cronômetro pausado. Tempo de estudo de hoje: ') + fmtDur(hojeEst));
   }
   setInterval(tempoTick, 1000);
 
@@ -645,8 +648,8 @@
     return '<div class="card" style="border-left:6px solid var(--ok)"><div class="row"><b>▶ Continuar de onde parei</b><span class="sp"></span><span class="small mut">' + ha(r.ts) + '</span></div><p style="margin:.3rem 0"><b>' + esc(d.titulo) + '</b><br><span class="small mut">Você estava ' + esc(d.onde) + '.</span></p><div class="row"><a class="btn pri" href="' + (r.tipo === 'quiz' ? '#/quiz?resume=1' : r.hash) + '">Continuar</a>' + (d.mat ? '<a class="btn" href="#/resumo/' + d.mat + '">Meu resumo</a>' : '') + '</div></div>';
   }
   function cardTempo() {
-    var tp = tempoDe(), hoje = tp.dias[today()] || 0, est = tp.diasEst[today()] || 0;
-    return '<div class="card"><div class="row"><b>⏱ Tempo de estudo</b><span class="sp"></span><a class="small" href="#/resumo">Meu resumo</a></div><div class="grid c3" style="margin-top:.5rem"><div><div class="small mut">Hoje no site</div><div class="stat" id="tt-hoje" style="font-size:1.3rem">' + fmtDur(hoje) + '</div></div><div><div class="small mut">Estudando hoje</div><div class="stat" id="tt-est" style="font-size:1.3rem">' + fmtDur(est) + '</div></div><div><div class="small mut">Total estudando</div><div class="stat" id="tt-tot" style="font-size:1.3rem">' + fmtDur(tp.estudo) + '</div></div></div><p class="small mut" style="margin:.4rem 0 0">"Estudando" soma aulas, questões, simulados e revisões. O cronômetro (no topo) pausa sozinho quando você sai da página, fecha o site ou fica 3 minutos parado.</p></div>';
+    var tp = tempoDe(), hoje = tp.diasEst[today()] || 0;
+    return '<div class="card"><div class="row"><b>⏱ Tempo de estudo</b><span class="sp"></span><a class="small" href="#/resumo">Meu resumo</a></div><div class="grid c3" style="margin-top:.5rem"><div><div class="small mut">Hoje</div><div class="stat" id="tt-hoje" style="font-size:1.3rem">' + fmtDur(hoje) + '</div></div><div><div class="small mut">Últimos 7 dias</div><div class="stat" id="tt-sem" style="font-size:1.3rem">' + fmtDur(semanaEst()) + '</div></div><div><div class="small mut">Total</div><div class="stat" id="tt-tot" style="font-size:1.3rem">' + fmtDur(tp.estudo) + '</div></div></div><p class="small mut" style="margin:.4rem 0 0">O cronômetro (no topo) conta <b>só nas telas de estudo</b>: aulas, questões, simulados, revisão e resumo. Nas outras telas ele fica parado. Também pausa sozinho quando você sai da página, fecha o site ou fica 3 minutos parado.</p></div>';
   }
 
   /* ---------- Foco na aprovação ---------- */
