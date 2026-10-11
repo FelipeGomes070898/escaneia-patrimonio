@@ -10,6 +10,8 @@ Sistema de estudo em HTML/JS puro (sem instalar nada) para o concurso da **SEMED
 ## Contas (login por usuário)
 Ao abrir o site, a pessoa **cria uma conta** (nome, senha e um login à escolha: **celular com DDD, e-mail ou nome de usuário**) ou **entra** na sua, digitando qualquer um dos três. O celular e o e-mail **não são verificados** (não há envio de código). Cada conta tem os seus próprios dados: cadastro, progresso, histórico de simulados, caderno de erros e revisões. Várias pessoas podem ter contas no mesmo aparelho, sem ver os dados umas das outras. Em *Minha conta*: sair, alterar senha e excluir a conta.
 
+**Entrar ou criar conta (separados):** a tela inicial tem duas opções claras, **Entrar na minha conta** (para quem já tem) e **Criar conta (primeiro acesso)**, além de **Importar conta de outro aparelho**. A conta só é criada **uma vez**; depois a pessoa só faz login (e com "Manter conectado" nem isso, no mesmo aparelho). Para usar a mesma conta em outro celular/computador: em *Minha conta → Exportar minha conta* e, no outro aparelho, *Importar conta* na tela inicial (o arquivo traz o cadastro, a senha criptografada e todo o progresso).
+
 > **Limite importante:** as contas ficam salvas **só no navegador do aparelho** (não há servidor). A mesma pessoa em outro celular/computador precisa criar outra conta (ou usar *Ajustes → Exportar/Importar*). A senha é guardada com hash (PBKDF2-SHA256 com sal), mas serve para separar usuários, não para proteger dados sensíveis, e não há recuperação de senha. Para login que acompanha a pessoa entre aparelhos é preciso um serviço de servidor (ex.: Firebase ou Supabase).
 > Quem já usava o site antes: o progresso é adotado pela **primeira conta criada** no aparelho.
 
