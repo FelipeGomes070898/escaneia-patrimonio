@@ -89,10 +89,23 @@
   var PAPEL_NOME = { dono: 'Dono', colaborador: 'Colaborador', aluno: 'Aluno' };
   function usuarioAtual() { return usuarios().filter(function (u) { return u.id === UID; })[0] || null; }
   function sessaoId() { var v = ''; try { v = sessionStorage.getItem('estudo.sessao') || ''; } catch (e) { } return v || lsGet('estudo.sessao') || ''; }
+  /* Contador de cadastros do site inteiro (serviço externo gratuito; aproximado). Cada conta soma 1 uma única vez. */
+  var CONTADOR = 'https://abacus.jasoncameron.dev', CONT_NS = 'rota-concurso-pvh-2026', CONT_KEY = 'cadastros';
+  function contaCadastro(id) {
+    var l = usuarios(), u = l.filter(function (x) { return x.id === id; })[0];
+    if (!u || u.contado || !window.fetch) return;
+    fetch(CONTADOR + '/hit/' + CONT_NS + '/' + CONT_KEY).then(function (r) { return r.ok ? r.json() : Promise.reject(); }).then(function () {
+      var l2 = usuarios(); l2.forEach(function (x) { if (x.id === id) x.contado = true; }); salvaUsuarios(l2);
+    }).catch(function () { });
+  }
+  function totalSite() {
+    if (!window.fetch) return Promise.resolve(null);
+    return fetch(CONTADOR + '/get/' + CONT_NS + '/' + CONT_KEY).then(function (r) { return r.status === 404 ? { value: 0 } : r.ok ? r.json() : Promise.reject(); }).then(function (j) { return +j.value || 0; }).catch(function () { return null; });
+  }
   function iniciaSessao(id, lembrar) {
     try { sessionStorage.setItem('estudo.sessao', id); sessionStorage.removeItem('estudo.nvok'); sessionStorage.removeItem('estudo.retomado'); } catch (e) { }
     if (lembrar) lsSet('estudo.sessao', id); else lsDel('estudo.sessao');
-    UID = id; nivelConfirmado = false; carregar(); guardaRetomar(); applyTheme(); iniciaVisita(); desenhaPill();
+    UID = id; nivelConfirmado = false; contaCadastro(id); carregar(); guardaRetomar(); applyTheme(); iniciaVisita(); desenhaPill();
   }
   /* cópia de "onde parou" da visita anterior: a visita atual vai sobrescrever S.retomar */
   var retomarAnterior = null;
@@ -497,7 +510,7 @@
   function vDono() {
     if (!ehDono()) return vDonoGate();
     var us = usuarios().map(resumoUsuario);
-    var h = '<h1>Área do dono</h1><div class="aviso"><b>Escopo desta tela:</b> mostra as contas criadas <b>neste aparelho</b>. O site não tem servidor, então não dá para ver quem acessa de outros celulares ou computadores. Veja no README como ligar um servidor para enxergar todos.</div>';
+    var h = '<h1>Área do dono</h1><div class="card" style="border-left:4px solid var(--brand,#1d4ed8)"><div class="small mut">Pessoas cadastradas no site (todos os aparelhos)</div><div class="stat" id="totsite">…</div><div class="small mut">Contagem aproximada, feita por um contador externo gratuito: soma 1 a cada conta nova, e contas antigas somam na próxima vez que entrarem. Não mostra quem são.</div></div><div class="aviso">Os dados abaixo (online, estudo, progresso) vêm só das contas <b>deste aparelho</b>; o site não tem servidor para ver os outros.</div>';
     h += '<div class="grid c3" style="margin-top:.7rem"><div class="card"><div class="small mut">Contas neste aparelho</div><div class="stat">' + us.length + '</div></div><div class="card"><div class="small mut">Online agora</div><div class="stat">' + us.filter(function (r) { return r.online; }).length + '</div></div><div class="card"><div class="small mut">Estudaram hoje</div><div class="stat">' + us.filter(function (r) { return r.hoje > 0; }).length + '</div></div></div>';
     h += '<h2>Usuários</h2>';
     us.sort(function (x, y) { return (y.a.ping || 0) - (x.a.ping || 0); }).forEach(function (r) {
@@ -510,6 +523,7 @@
     if (ehDonoPleno()) h += blocoPessoas();
     h += '<p class="noprint" style="margin-top:1rem">' + (papelAtual() === 'dono' ? '<button class="btn sm" id="dn-lock">🔒 Bloquear a área do dono neste aparelho</button>' : '') + '</p>';
     $app.innerHTML = h;
+    totalSite().then(function (n) { var el = document.getElementById('totsite'); if (el) el.textContent = n === null ? 'indisponível agora' : n; });
     var lk = document.getElementById('dn-lock'); if (lk) lk.onclick = function () { S.donoOk = false; save(); toast('Área do dono bloqueada'); go('#/'); };
     if (ehDonoPleno()) ligaPessoas();
     timerId = setInterval(function () { if ((location.hash || '') === '#/dono') vDono(); }, 5000);
@@ -1234,7 +1248,7 @@
     navigator.serviceWorker.addEventListener('controllerchange', function () { if (tinhaSW && !recarregou) { recarregou = true; location.reload(); } });
     navigator.serviceWorker.register('sw.js').then(function (r) { return r.update(); }).catch(function () { });
   }
-  (function () { var sid = sessaoId(); if (sid && usuarios().some(function (u) { return u.id === sid; })) { UID = sid; carregar(); guardaRetomar(); applyTheme(); iniciaVisita(); } desenhaPill(); })();
+  (function () { var sid = sessaoId(); if (sid && usuarios().some(function (u) { return u.id === sid; })) { UID = sid; contaCadastro(sid); carregar(); guardaRetomar(); applyTheme(); iniciaVisita(); } desenhaPill(); })();
   route();
   confirmarNivel();
   if (!document.querySelector('.modal')) oferecerRetomar();
