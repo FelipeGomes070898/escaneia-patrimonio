@@ -36,7 +36,7 @@ Mostra as contas **deste aparelho**: online, última entrada, tempo estudando (h
 Antes de entrar, a pessoa se **cadastra**: nome, o(s) **concurso(s)** em que se inscreveu (**SEMED, SEMUSA, IPAM ou SESAU-RO**) e, dentro de cada um, o **nível que pagou** (fundamental, médio e/ou superior, conforme os níveis de cada concurso). Cada par concurso + nível é uma inscrição; quem tem mais de uma escolhe qual estudar ao entrar e alterna pelo concurso no topo da tela. Banca, data da prova e estrutura mudam conforme a inscrição ativa. Tópicos, questões, simulado e apostilas seguem o nível. O cadastro (em *Ajustes → Meu cadastro*) pode ser editado sem perder o progresso.
 
 > O cadastro fica salvo só no aparelho (não há servidor nem login real) e o site não confere inscrição nem pagamento: vale o que a pessoa informar.
-> Só o edital da SEMED foi lido (nível médio = estrutura confirmada). SEMUSA tem datas do levantamento de 10/10/2026; IPAM e SESAU-RO ainda não tinham edital: aparecem como "data a definir" e estrutura estimada.
+> Só o edital da SEMED foi lido (nível médio = estrutura confirmada). Situação dos concursos atualizada em 29/10/2026 (notícias): SEMED e SEMUSA com edital e inscrições até 11/11; IPAM com edital e inscrições de 03/11 a 07/12 (provas 21 e 28/02/2027); SESAU-RO com banca definida, sem edital confirmado. Estrutura da prova de SEMUSA, IPAM e SESAU-RO continua estimada.
 
 Níveis:
 - **Médio:** completo, com a estrutura da prova da SEMED (edital 24/2026): 27 tópicos.
@@ -58,7 +58,7 @@ Depois do cadastro tudo gira em torno de passar no nível escolhido:
 | Painel | contagem regressiva das provas, rotina do dia, próxima aula, progresso por matéria |
 | Trilha | 5 matérias, de 17 a 29 tópicos conforme o nível, cada um em 3 níveis (contexto, básico, aprofundado) |
 | Aula | texto, links para **videoaulas no YouTube** e **PDFs resumidos no Google** (buscas prontas), seus próprios links, apostila em PDF, teste rápido, anotação de 3 linhas, conclusão por volta |
-| Questões | 133 questões originais; ao responder, o site explica **cada alternativa**: por que a sua estava errada, por que a certa está certa e por que as outras não servem |
+| Questões | 176 questões originais; ao responder, o site explica **cada alternativa**: por que a sua estava errada, por que a certa está certa e por que as outras não servem |
 | Simulados | 50 questões / 3 h na distribuição da prova (10/10/10/15/5), ou mini de 20; correção por matéria e tópico com comentário de cada alternativa. O histórico guarda cada simulado: dá para **abrir de novo a correção** ou **refazer o mesmo** |
 | Caderno de erros | entra sozinho ao errar; motivo (não sabia, confundi, desatenção) e a regra correta |
 | Revisão | agenda automática em 1, 7 e 21 dias após concluir uma etapa |

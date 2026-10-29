@@ -569,7 +569,7 @@
       save();
     }
   }
-  function provaTxt(cc) { return cc.prova ? brDate(cc.prova.slice(0, 10)) + ' às ' + cc.prova.slice(11, 16).replace(':', 'h') : 'sem data oficial'; }
+  function provaTxt(cc) { return cc.prova ? brDate(cc.prova.slice(0, 10)) + (cc.prova.length > 10 ? ' às ' + cc.prova.slice(11, 16).replace(':', 'h') : ' (horário a confirmar)') : 'sem data oficial'; }
 
   var nivelConfirmado = false;
   try { nivelConfirmado = sessionStorage.getItem('estudo.nvok') === '1'; } catch (e) { }
@@ -1202,7 +1202,7 @@
   function vEdital() {
     $app.innerHTML = '<h1>Edital e regras da prova</h1>' +
       (!estrConf() ? '<div class="aviso">Esta tela resume o cargo de <b>nível médio</b> da SEMED (edital 24/2026). Para a sua inscrição (' + esc(rotulo({ c: S.concurso, n: S.nivel })) + ', banca ' + esc(concInfo(S.concurso).banca) + '), consulte o Anexo I (cargos) e o Anexo IV (conteúdos) do edital: <b>A CONFIRMAR NO EDITAL</b>.</div>' : '') +
-      '<div class="aviso">Informações do corpo do <b>Edital SEMED nº 24/2026</b> (lido em 10/10/2026) e de reportagens de 3º. O <b>Anexo IV (conteúdos) não consta nesse PDF</b>: baixe-o no site da banca e compare com a trilha. <b>Nada aqui substitui o edital oficial.</b></div>' +
+      '<div class="aviso">Informações do corpo do <b>Edital SEMED nº 24/2026</b> (lido em 10/10/2026) e de reportagens de 29/10/2026. O <b>Anexo IV (conteúdos) não consta nesse PDF</b>: baixe-o no site da banca e compare com a trilha. <b>Nada aqui substitui o edital oficial.</b></div>' +
       '<div class="card"><h3 style="margin-top:0">Links oficiais</h3><div class="res"><a target="_blank" rel="noopener" href="https://www.ibgpconcursos.com.br">Site da banca IBGP (inscrição, anexos, avisos)</a><a target="_blank" rel="noopener" href="https://dhg1h5j42swfq.cloudfront.net/2026/09/29180921/00-edital-concurso-porto-velho_semed_final.pdf">PDF do edital SEMED nº 24/2026 (corpo, sem anexos)</a></div></div>' +
       '<div class="card"><h3 style="margin-top:0">SEMED · Agente de Secretaria Escolar (nível médio)</h3><table>' +
       '<tr><th>Banca</th><td>IBGP</td></tr><tr><th>Prova objetiva</th><td>Domingo 06/12/2026, 9h15 (3 h), 50 questões, 5 alternativas, 1 correta</td></tr>' +
@@ -1213,7 +1213,7 @@
       '<tr><th>Desempate</th><td>1º idoso (60+); 2º Específicos; 3º Português; 4º Legislação; 5º Raciocínio Lógico; 6º Gerais; 7º jurado; 8º idade maior (item 10.4)</td></tr></table></div>' +
       '<div class="card"><h3 style="margin-top:0">Regras do dia da prova (itens 9.3 e 9.2)</h3><ul><li>Caneta esferográfica <b>azul ou preta</b>, de corpo transparente.</li><li><b>Assinar</b> a Folha de Respostas (igual ao documento). Sem assinatura = eliminação.</li><li>Marque <b>uma</b> alternativa por questão; rasuras/emendas ou duas marcações anulam a questão.</li><li>Não amasse nem dobre a folha; não há substituição por erro do candidato.</li><li>Só pode sair definitivamente entregando a Folha de Respostas.</li><li>Não encontrei no corpo do edital desconto por erro: <b>confirmar no Anexo III</b>.</li></ul></div>' +
       '<div class="card"><h3 style="margin-top:0">Recursos (item 11)</h3><p>Fundamentado, sem identificação, até 3.000 caracteres, citando referência completa (capítulo e página). Questão anulada: ponto para todos.</p></div>' +
-      '<div class="card"><h3 style="margin-top:0">Outros concursos</h3><ul><li><b>SEMUSA (IBGP)</b>: edital nº 25/2026, prova prevista para 13/12/2026 - conferir.</li><li><b>IPAM (IBADE)</b> e <b>SESAU-RO (IDECAN)</b>: sem edital confirmado até 10/10/2026. Acompanhe os sites das bancas.</li></ul></div>';
+      '<div class="card"><h3 style="margin-top:0">Outros concursos</h3><ul><li><b>SEMUSA (IBGP)</b>: edital nº 25/2026 publicado, 2.248 vagas, inscrições até 11/11, prova prevista para 13/12/2026.</li><li><b>IPAM (IBADE)</b>: edital publicado, ~70 vagas, inscrições de 03/11 a 07/12/2026, provas previstas em 21 e 28/02/2027.</li><li><b>SESAU-RO (IDECAN)</b>: banca definida, edital ainda não confirmado. Acompanhe os sites das bancas.</li></ul></div>';
   }
 
   /* ---------- Mais / Config ---------- */
