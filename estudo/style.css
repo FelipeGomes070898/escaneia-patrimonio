@@ -126,3 +126,6 @@ table{width:100%;border-collapse:collapse;font-size:.92rem}th,td{padding:.4rem .
 .db i{display:block;width:100%;background:var(--pri);border-radius:4px 4px 0 0;min-height:3px}
 .db span{font-size:.62rem;color:var(--mut);margin-top:2px}
 .conc[hidden],h3[hidden]{display:none!important}
+.rasc,.duvida{margin-top:.7rem;border:1px solid var(--line);border-radius:12px;padding:.5rem .7rem}
+.rasc summary,.duvida summary{cursor:pointer;font-weight:600}
+.rasc textarea,.duvida textarea{margin-top:.4rem}

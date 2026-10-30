@@ -1,5 +1,5 @@
 /* Cache para uso offline (rede primeiro, para nunca ficar preso a uma versão antiga). Troque a versão ao alterar arquivos. */
-var CACHE = 'rota-concurso-v23';
+var CACHE = 'rota-concurso-v25';
 var ARQUIVOS = ['./', 'index.html', 'style.css', 'app.js', 'manifest.json', 'icon.svg',
   'data/admin-config.js', 'data/core.js', 'data/portugues.js', 'data/logica.js', 'data/legislacao.js', 'data/especificos.js', 'data/gerais.js', 'data/superior.js', 'data/coment-portugues.js', 'data/coment-logica.js', 'data/coment-legislacao.js', 'data/coment-especificos.js', 'data/coment-gerais.js', 'data/extra.js', 'data/extra2.js', 'data/edital-legislacao.js', 'data/pf.js', 'data/pf-questoes.js'];
 self.addEventListener('install', function (e) { e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(ARQUIVOS); }).then(function () { return self.skipWaiting(); })); });
