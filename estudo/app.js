@@ -609,9 +609,9 @@
       '<h1>' + (edit ? 'Meu cadastro' : 'Cadastre-se para entrar') + '</h1>' +
       '<p class="mut">' + (edit ? 'Atualize seu nome ou suas inscrições.' : 'Informe seu nome, o(s) concurso(s) em que você se inscreveu e o nível que pagou em cada um. Tudo no site é montado para você passar nessa prova: meta de nota, missão diária e foco nos seus pontos fracos.') + '</p>' +
       '<form id="cad" class="card" novalidate><label for="cd-nome">Seu nome</label><input type="text" id="cd-nome" maxlength="60" autocomplete="name" placeholder="Ex.: Maria Silva" value="' + esc(nome) + '">' +
-      '<fieldset style="border:0;padding:0;margin:.8rem 0 0"><legend style="font-weight:600;margin-bottom:.3rem">Em qual concurso você se inscreveu?</legend><p class="small mut" style="margin:0 0 .4rem">Marque o concurso e, dentro dele, o nível da prova que você pagou (pode marcar mais de um nível e mais de um concurso).</p>' +
-      C.esferas.map(function (es) { return '<h3 style="margin:.9rem 0 .1rem">' + es.icone + ' ' + es.nome + '</h3>' + C.concursos.filter(function (cc) { return cc.esfera === es.id; }).map(function (cc) {
-        return '<div class="conc" data-cc="' + cc.id + '" style="border:1px solid var(--line);border-radius:12px;padding:.6rem .7rem;margin:.5rem 0"><label class="chk" style="font-weight:400;margin:0"><input type="checkbox" name="cc" value="' + cc.id + '"' + (temC(cc.id) ? ' checked' : '') + '><span><b>' + esc(cc.nome) + '</b> · banca ' + esc(cc.banca) + '<br><span class="small mut">' + esc(cc.completo) + '</span><br><span class="small mut">Prova: ' + esc(provaTxt(cc)) + '. ' + esc(cc.status) + '</span></span></label>' +
+      '<fieldset style="border:0;padding:0;margin:.8rem 0 0"><legend style="font-weight:600;margin-bottom:.3rem">Em qual concurso você se inscreveu?</legend><p class="small mut" style="margin:0 0 .4rem">Use os menus para achar o concurso: categoria, banca realizadora e cidade. Depois marque o concurso e o nível da prova que você pagou (pode marcar mais de um).</p><div id="fbox"></div>' +
+      C.esferas.map(function (es) { return '<h3 data-es="' + es.id + '" style="margin:.9rem 0 .1rem">' + es.icone + ' ' + es.nome + '</h3>' + C.concursos.filter(function (cc) { return cc.esfera === es.id; }).map(function (cc) {
+        return '<div class="conc" data-cc="' + cc.id + '" data-es="' + cc.esfera + '" style="border:1px solid var(--line);border-radius:12px;padding:.6rem .7rem;margin:.5rem 0"><label class="chk" style="font-weight:400;margin:0"><input type="checkbox" name="cc" value="' + cc.id + '"' + (temC(cc.id) ? ' checked' : '') + '><span><b>' + esc(cc.nome) + '</b> · banca ' + esc(cc.banca) + '<br><span class="small mut">' + esc(cc.completo) + '</span><br><span class="small mut">Prova: ' + esc(provaTxt(cc)) + '. ' + esc(cc.status) + '</span></span></label>' +
           '<div class="nvs" style="margin:.4rem 0 0 2rem"' + (temC(cc.id) ? '' : ' hidden') + '><div class="small" style="font-weight:600">Nível que você pagou:</div>' +
           cc.niveis.map(function (n) { return '<label class="chk" style="font-weight:400;margin:0;padding:.25rem 0"><input type="checkbox" name="n-' + cc.id + '" value="' + n + '"' + (tem(cc.id, n) ? ' checked' : '') + '><span>' + esc(nomeNivel(n)) + '</span></label>'; }).join('') + '</div></div>';
       }).join(''); }).join('') + '</fieldset><div id="cd-err" class="small" role="alert" style="color:var(--bad);min-height:1.2em;margin:.4rem 0"></div>' +
@@ -621,6 +621,13 @@
     Array.prototype.forEach.call($app.querySelectorAll('input[name=cc]'), function (c) {
       c.onchange = function () { c.closest('.conc').querySelector('.nvs').hidden = !c.checked; };
     });
+    function aplicaCad() {
+      document.getElementById('fbox').innerHTML = barraFiltroHtml();
+      Array.prototype.forEach.call($app.querySelectorAll('.conc'), function (d) { d.hidden = !casa(concInfo(d.getAttribute('data-cc')), FILT); });
+      Array.prototype.forEach.call($app.querySelectorAll('h3[data-es]'), function (t) { t.hidden = !Array.prototype.some.call($app.querySelectorAll('.conc[data-es="' + t.getAttribute('data-es') + '"]'), function (d) { return !d.hidden; }); });
+      ligaFiltro(aplicaCad);
+    }
+    aplicaCad();
     document.getElementById('cad').onsubmit = function (e) {
       e.preventDefault();
       var nm = document.getElementById('cd-nome').value.replace(/\s+/g, ' ').trim(), err = document.getElementById('cd-err'), ins = [], falta = null;
@@ -1204,21 +1211,55 @@
   }
 
   /* ---------- Edital ---------- */
+  /* ---------- Filtro em menus suspensos: categoria, banca e cidade (em cascata) ---------- */
+  var FILT = { esfera: '', banca: '', cidade: '' };
+  function casa(cc, f) { return (!f.esfera || cc.esfera === f.esfera) && (!f.banca || cc.banca === f.banca) && (!f.cidade || cc.cidade === f.cidade); }
+  function opcoesFiltro(campo) {
+    var f = { esfera: FILT.esfera, banca: FILT.banca, cidade: FILT.cidade }; f[campo] = '';
+    var v = []; C.concursos.forEach(function (cc) { if (casa(cc, f) && v.indexOf(cc[campo]) < 0) v.push(cc[campo]); });
+    return v.sort(function (a, b) { return String(a).localeCompare(String(b), 'pt-BR'); });
+  }
+  function rotEsfera(id) { var e = C.esferas.filter(function (x) { return x.id === id; })[0]; return e ? e.icone + ' ' + e.nome : id; }
+  function barraFiltroHtml() {
+    function sel(campo, titulo, rot) {
+      return '<label class="small" style="display:block;font-weight:600;margin:.3rem 0 .15rem" for="f-' + campo + '">' + titulo + '</label><select id="f-' + campo + '" data-f="' + campo + '"><option value="">Todas</option>' +
+        opcoesFiltro(campo).map(function (o) { return '<option value="' + esc(o) + '"' + (FILT[campo] === o ? ' selected' : '') + '>' + esc(rot ? rot(o) : o) + '</option>'; }).join('') + '</select>';
+    }
+    return '<div class="card" id="fbar"><b>Filtrar concursos</b><p class="small mut" style="margin:.2rem 0">Escolha a categoria, a banca realizadora e a cidade. As opções de cada menu se ajustam às outras escolhas.</p>' +
+      sel('esfera', 'Categoria', rotEsfera) + sel('banca', 'Banca realizadora') + sel('cidade', 'Cidade / abrangência') +
+      '<div class="row" style="margin-top:.5rem"><button type="button" class="btn sm" id="f-limpa">Limpar filtros</button><span class="sp"></span><span class="small mut" id="f-cont"></span></div></div>';
+  }
+  function ligaFiltro(onchange) {
+    var bar = document.getElementById('fbar'); if (!bar) return;
+    Array.prototype.forEach.call(bar.querySelectorAll('select'), function (sl) {
+      sl.onchange = function () {
+        FILT[sl.getAttribute('data-f')] = sl.value;
+        ['esfera', 'banca', 'cidade'].forEach(function (c) { if (FILT[c] && opcoesFiltro(c).indexOf(FILT[c]) < 0) FILT[c] = ''; });
+        onchange();
+      };
+    });
+    document.getElementById('f-limpa').onclick = function () { FILT = { esfera: '', banca: '', cidade: '' }; onchange(); };
+    var n = C.concursos.filter(function (cc) { return casa(cc, FILT); }).length;
+    document.getElementById('f-cont').textContent = n + ' concurso(s)';
+  }
+
   /* ---------- Concursos por categoria (municipal, estadual, federal) ---------- */
   function vConcursos() {
-    var h = '<h1>Concursos por categoria</h1><p class="mut">Escolha o concurso que você vai estudar. Os dados vêm de notícias e dos editais; <b>confirme sempre no edital oficial da banca</b>. A data de atualização é 30/10/2026.</p>';
+    var h = '<h1>Concursos por categoria</h1><p class="mut">Escolha o concurso que você vai estudar. Os dados vêm de notícias e dos editais; <b>confirme sempre no edital oficial da banca</b>. A data de atualização é 30/10/2026.</p>' + barraFiltroHtml();
     C.esferas.forEach(function (es) {
-      var lista = C.concursos.filter(function (cc) { return cc.esfera === es.id; });
+      var lista = C.concursos.filter(function (cc) { return cc.esfera === es.id && casa(cc, FILT); });
+      if (!lista.length) return;
       h += '<h2>' + es.icone + ' ' + es.nome + '</h2>';
-      if (!lista.length) h += '<div class="card mut">Nenhum concurso nesta categoria ainda.</div>';
       lista.forEach(function (cc) {
         var meus = inscs().filter(function (i) { return i.c === cc.id; }), d = cc.prova && cc.prova.length > 10 ? diasPara(cc.prova) : null;
         h += '<div class="card"><div class="row"><b>' + esc(cc.nome) + '</b><span class="pill">' + esc(cc.banca) + '</span>' + (meus.length ? '<span class="pill ok">na sua lista</span>' : '') + '<span class="sp"></span><span class="small mut">' + esc(cc.prova ? 'Prova: ' + provaTxt(cc) + (d !== null && d >= 0 ? ' · faltam ' + d + ' dia(s)' : '') : 'Prova: sem data oficial') + '</span></div>' +
-          '<div class="small mut" style="margin:.2rem 0">' + esc(cc.completo) + '</div><p class="small" style="margin:.4rem 0">' + esc(cc.status) + '</p>' +
+          '<div class="small mut" style="margin:.2rem 0">' + esc(cc.completo) + ' · ' + esc(cc.cidade) + '</div><p class="small" style="margin:.4rem 0">' + esc(cc.status) + '</p>' +
           '<div class="row" style="flex-wrap:wrap;gap:.4rem"><span class="small mut">Estudar como:</span>' + cc.niveis.map(function (n) { return '<button class="btn sm' + (S.concurso === cc.id && S.nivel === n ? ' pri' : '') + '" data-cc="' + cc.id + '" data-n="' + n + '">' + esc(nomeNivel(n)) + '</button>'; }).join('') + '<a class="btn sm" target="_blank" rel="noopener" href="' + esc(cc.busca) + '">Site da banca / busca</a></div></div>';
       });
     });
+    if (!C.concursos.some(function (cc) { return casa(cc, FILT); })) h += '<div class="card mut">Nenhum concurso com esses filtros.</div>';
     $app.innerHTML = h;
+    ligaFiltro(vConcursos);
     Array.prototype.forEach.call($app.querySelectorAll('button[data-cc]'), function (b) {
       b.onclick = function () {
         var c = b.getAttribute('data-cc'), n = b.getAttribute('data-n');
