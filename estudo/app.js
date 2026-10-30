@@ -30,9 +30,12 @@
   function mat(id) { return C.materias.filter(function (m) { return m.id === id; })[0]; }
   function topico(m, t) { var mm = mat(m); return mm && mm.topicos.filter(function (x) { return x.id === t; })[0]; }
   function nvInfo() { return C.niveis.filter(function (n) { return n.id === S.nivel; })[0]; }
-  function topsOf(m) { return m.topicos.filter(function (t) { return t.nv.indexOf(S.nivel) >= 0; }); }
+  /* Tópico visível: nível certo e trilha certa. Concurso federal (PF) só vê tópicos próprios (so) e os comuns marcados pf; os demais não veem tópicos exclusivos (so). */
+  function tvis(t) { var cc = concInfo(S.concurso); if (t.nv.indexOf(S.nivel) < 0) return false; return cc.esfera === 'federal' ? (t.so ? t.so.indexOf(cc.id) >= 0 : t.pf === true) : !t.so; }
+  function distAtual() { return concInfo(S.concurso).dist || C.dist[S.nivel]; }
+  function topsOf(m) { return m.topicos.filter(tvis); }
   function mats() { return C.materias.filter(function (m) { return topsOf(m).length; }); }
-  function visivel(mid, tid) { var t = topico(mid, tid); return !!t && t.nv.indexOf(S.nivel) >= 0; }
+  function visivel(mid, tid) { var t = topico(mid, tid); return !!t && tvis(t); }
   function qById(id) { return C.questoes.filter(function (q) { return q.id === id; })[0]; }
   function qsOf(m, t) { return C.questoes.filter(function (q) { return (!m || q.m === m) && (!t || q.t === t) && visivel(q.m, q.t); }); }
   function tkey(m, t) { return m + '/' + t; }
@@ -273,11 +276,11 @@
     ['#/', 'Painel', '🏠'], ['#/trilha', 'Trilha', '🗺️'], ['#/praticar', 'Questões', '✏️'],
     ['#/simulados', 'Simulados', '⏱️'], ['#/mais', 'Mais', '☰']
   ];
-  var SIDE = NAV.slice(0, 4).concat([['#/erros', 'Erros', '📓'], ['#/revisao', 'Revisão', '🔁'], ['#/cronograma', 'Cronograma', '📅'], ['#/edital', 'Edital', '📄'], ['#/conta', 'Conta', '👤'], ['#/config', 'Ajustes', '⚙️']]);
+  var SIDE = NAV.slice(0, 4).concat([['#/erros', 'Erros', '📓'], ['#/revisao', 'Revisão', '🔁'], ['#/cronograma', 'Cronograma', '📅'], ['#/concursos', 'Concursos', '🗂️'], ['#/edital', 'Edital', '📄'], ['#/conta', 'Conta', '👤'], ['#/config', 'Ajustes', '⚙️']]);
   function drawNav(h) {
     var cur = h.split('?')[0], chip = document.getElementById('nvchip'), ni = nvInfo();
     if (chip) { chip.hidden = !ni; chip.textContent = ni && S.concurso ? '🎓 ' + concInfo(S.concurso).nome + ' · ' + NV_CURTO[S.nivel] : ''; chip.title = 'Seu nível cadastrado. Toque para trocar.'; }
-    function on(href) { if (href === '#/') return cur === '#/' || cur === ''; if (href === '#/mais') return ['#/mais', '#/erros', '#/revisao', '#/cronograma', '#/edital', '#/config', '#/conta', '#/resumo', '#/dono'].indexOf(cur) >= 0 || cur.indexOf('#/dono') === 0; return cur.indexOf(href) === 0 || (href === '#/trilha' && /^#\/(materia|aula)/.test(cur)) || (href === '#/praticar' && cur.indexOf('#/quiz') === 0); }
+    function on(href) { if (href === '#/') return cur === '#/' || cur === ''; if (href === '#/mais') return ['#/mais', '#/erros', '#/revisao', '#/cronograma', '#/edital', '#/concursos', '#/config', '#/conta', '#/resumo', '#/dono'].indexOf(cur) >= 0 || cur.indexOf('#/dono') === 0; return cur.indexOf(href) === 0 || (href === '#/trilha' && /^#\/(materia|aula)/.test(cur)) || (href === '#/praticar' && cur.indexOf('#/quiz') === 0); }
     var SIDE2 = mostraAreaDono() ? SIDE.concat([['#/dono', 'Dono', '🛡️']]) : SIDE;
     document.getElementById('sidenav').innerHTML = SIDE2.map(function (n) { return '<a href="' + n[0] + '" class="' + (on(n[0]) ? 'on' : '') + '">' + n[1] + '</a>'; }).join('');
     document.getElementById('bottomnav').innerHTML = NAV.map(function (n) { return '<a href="' + n[0] + '" class="' + (on(n[0]) ? 'on' : '') + '"><span class="ic">' + n[2] + '</span>' + n[1] + '</a>'; }).join('');
@@ -299,7 +302,7 @@
     var fn = {
       '': vPainel, trilha: vTrilha, materia: function () { vMateria(p[2]); }, aula: function () { vAula(p[2], p[3], q.aba); },
       praticar: vPraticar, simrev: function () { vSimRev(p[2]); }, quiz: function () { vQuiz(q); }, simulados: vSimulados, simulado: vSimRun, erros: vErros,
-      revisao: vRevisao, dono: function () { if (p[2]) vDonoUser(p[2]); else vDono(); }, resumo: function () { vResumo(p[2]); }, conta: vConta, nivel: vNivel, cadastro: vCadastro, cronograma: vCron, edital: vEdital, config: vConfig, mais: vMais
+      revisao: vRevisao, dono: function () { if (p[2]) vDonoUser(p[2]); else vDono(); }, resumo: function () { vResumo(p[2]); }, conta: vConta, nivel: vNivel, cadastro: vCadastro, cronograma: vCron, edital: vEdital, concursos: vConcursos, config: vConfig, mais: vMais
     }[v] || vPainel;
     fn();
     window.scrollTo(0, 0);
@@ -560,7 +563,9 @@
   function nomeNivel(id) { var n = C.niveis.filter(function (x) { return x.id === id; })[0]; return n ? n.nome : id; }
   function rotulo(i) { return concInfo(i.c).nome + ' · ' + nomeNivel(i.n); }
   function setAlvo(c, n) { S.concurso = c; S.nivel = n; }
-  function estrConf() { return S.concurso === 'semed' && S.nivel === 'medio'; } /* só esta combinação tem edital lido */
+  function estrConf() { return S.concurso === 'semed' && S.nivel === 'medio'; }
+  function pdfKey() { return concInfo(S.concurso).esfera === 'federal' ? 'pf' : S.nivel; }
+  function concDesc(c) { return concInfo(c).esfera === 'federal' ? 'Concurso federal' : concInfo(c).esfera === 'estadual' ? 'Concurso estadual' : 'Concurso municipal'; } /* só esta combinação tem edital lido */
   function primeiroNome() { return S.perfil ? String(S.perfil.nome).split(' ')[0] : ''; }
   function marcaSessao() { nivelConfirmado = true; try { sessionStorage.setItem('estudo.nvok', '1'); } catch (e) { } }
   function migraPerfil() {
@@ -600,16 +605,16 @@
     function tem(c, n) { return marc.some(function (i) { return i.c === c && i.n === n; }); }
     function temC(c) { return marc.some(function (i) { return i.c === c; }); }
     var nome = edit ? S.perfil.nome : ((usuarioAtual() || {}).nome || '');
-    var h = (edit ? '' : '<div class="card" style="border-left:6px solid var(--pri)"><b>Bem-vindo(a) à Rota do Concurso</b><p class="small" style="margin:.3rem 0">Concursos de Porto Velho/RO 2026. Primeiro o cadastro; depois o sistema monta o seu estudo para passar:</p><ul class="small" style="margin:.2rem 0;padding-left:1.1rem"><li>meta de nota e nota projetada</li><li>missão diária e foco nos seus pontos fracos</li><li>simulados, caderno de erros e revisão espaçada</li></ul></div>') +
+    var h = (edit ? '' : '<div class="card" style="border-left:6px solid var(--pri)"><b>Bem-vindo(a) à Rota do Concurso</b><p class="small" style="margin:.3rem 0">Concursos municipais, estaduais e federais (Porto Velho/RO e Polícia Federal). Primeiro o cadastro; depois o sistema monta o seu estudo para passar:</p><ul class="small" style="margin:.2rem 0;padding-left:1.1rem"><li>meta de nota e nota projetada</li><li>missão diária e foco nos seus pontos fracos</li><li>simulados, caderno de erros e revisão espaçada</li></ul></div>') +
       '<h1>' + (edit ? 'Meu cadastro' : 'Cadastre-se para entrar') + '</h1>' +
       '<p class="mut">' + (edit ? 'Atualize seu nome ou suas inscrições.' : 'Informe seu nome, o(s) concurso(s) em que você se inscreveu e o nível que pagou em cada um. Tudo no site é montado para você passar nessa prova: meta de nota, missão diária e foco nos seus pontos fracos.') + '</p>' +
       '<form id="cad" class="card" novalidate><label for="cd-nome">Seu nome</label><input type="text" id="cd-nome" maxlength="60" autocomplete="name" placeholder="Ex.: Maria Silva" value="' + esc(nome) + '">' +
       '<fieldset style="border:0;padding:0;margin:.8rem 0 0"><legend style="font-weight:600;margin-bottom:.3rem">Em qual concurso você se inscreveu?</legend><p class="small mut" style="margin:0 0 .4rem">Marque o concurso e, dentro dele, o nível da prova que você pagou (pode marcar mais de um nível e mais de um concurso).</p>' +
-      C.concursos.map(function (cc) {
+      C.esferas.map(function (es) { return '<h3 style="margin:.9rem 0 .1rem">' + es.icone + ' ' + es.nome + '</h3>' + C.concursos.filter(function (cc) { return cc.esfera === es.id; }).map(function (cc) {
         return '<div class="conc" data-cc="' + cc.id + '" style="border:1px solid var(--line);border-radius:12px;padding:.6rem .7rem;margin:.5rem 0"><label class="chk" style="font-weight:400;margin:0"><input type="checkbox" name="cc" value="' + cc.id + '"' + (temC(cc.id) ? ' checked' : '') + '><span><b>' + esc(cc.nome) + '</b> · banca ' + esc(cc.banca) + '<br><span class="small mut">' + esc(cc.completo) + '</span><br><span class="small mut">Prova: ' + esc(provaTxt(cc)) + '. ' + esc(cc.status) + '</span></span></label>' +
           '<div class="nvs" style="margin:.4rem 0 0 2rem"' + (temC(cc.id) ? '' : ' hidden') + '><div class="small" style="font-weight:600">Nível que você pagou:</div>' +
           cc.niveis.map(function (n) { return '<label class="chk" style="font-weight:400;margin:0;padding:.25rem 0"><input type="checkbox" name="n-' + cc.id + '" value="' + n + '"' + (tem(cc.id, n) ? ' checked' : '') + '><span>' + esc(nomeNivel(n)) + '</span></label>'; }).join('') + '</div></div>';
-      }).join('') + '</fieldset><div id="cd-err" class="small" role="alert" style="color:var(--bad);min-height:1.2em;margin:.4rem 0"></div>' +
+      }).join(''); }).join('') + '</fieldset><div id="cd-err" class="small" role="alert" style="color:var(--bad);min-height:1.2em;margin:.4rem 0"></div>' +
       '<div class="row"><button type="submit" class="btn pri">' + (edit ? 'Salvar cadastro' : 'Entrar no site') + '</button>' + (edit ? '<a class="btn" href="#/">Cancelar</a>' : '') + '</div>' +
       '<p class="small mut" style="margin-top:.8rem">🔒 O cadastro fica salvo só neste aparelho; nada é enviado a servidor. O site não confere a inscrição nem o pagamento: vale o que você informar.</p></form>';
     $app.innerHTML = h;
@@ -777,7 +782,7 @@
 
   /* ---------- Foco na aprovação ---------- */
   var DESEMPATE = ['especificos', 'portugues', 'legislacao', 'logica', 'gerais']; // edital 24/2026, item 10.4 (SEMED)
-  function dqs() { return C.dist[S.nivel].q; }
+  function dqs() { return distAtual().q; }
   function totQ() { var d = dqs(); return Object.keys(d).reduce(function (a, k) { return a + d[k]; }, 0); }
   function metaNota() { return S.metaNota || 70; }
   function accOf(list) { var t = 0, h = 0; list.forEach(function (q) { var a = S.answers[q.id]; if (a) { t += a.tries; h += a.hits; } }); return { t: t, h: h, p: t ? h / t : null }; }
@@ -870,7 +875,7 @@
       h += '<a class="card" style="display:block;color:inherit;text-decoration:none" href="#/materia/' + m.id + '"><div class="row"><b>' + esc(m.nome) + '</b><span class="sp"></span><span class="small mut">' + (a.tries ? 'acertos ' + a.p + '%' : 'sem questões feitas') + '</span></div>' + bar(pct(matProgress(m.id, 1), tot), m.cor) +
         '<div class="small mut" style="margin-top:.3rem">Volta 1: ' + matProgress(m.id, 1) + '/' + tot + ' · Volta 2: ' + matProgress(m.id, 2) + '/' + tot + ' · Volta 3: ' + matProgress(m.id, 3) + '/' + tot + '</div></a>';
     });
-    h += '<div class="aviso">Conteúdos marcados como <b>provável</b> vêm do levantamento de 10/10/2026. O <b>Anexo IV</b> do edital (conteúdo programático oficial) não veio no PDF que consegui ler: confira em <a href="#/edital">Edital</a>.</div>';
+    h += '<div class="aviso">Conteúdos marcados como <b>provável</b> ainda não aparecem no Anexo IV que consegui ler. O Anexo IV só chegou para mim <b>em parte</b>: a retificação nº 27/2026 (09/10/2026) confirma o conteúdo de <b>Legislação</b> do ensino médio da SEMED; as demais matérias seguem prováveis. Veja em <a href="#/edital">Edital</a>.</div>';
     $app.innerHTML = h;
   }
 
@@ -886,7 +891,7 @@
     var m = mat(id); if (!m) return go('#/trilha');
     S.retomar = { tipo: 'materia', m: id, hash: '#/materia/' + id, ts: Date.now() }; save();
     var h = '<p><a href="#/trilha">← Trilha</a></p><h1>' + esc(m.nome) + '</h1><p class="mut">' + esc(m.banca) + '</p>';
-    h += '<div class="row noprint" style="margin-bottom:.6rem"><a class="btn sm" href="pdf/apostila-' + S.nivel + '-' + m.id + '.pdf" target="_blank" rel="noopener">⬇ Apostila em PDF</a><a class="btn sm" href="#/resumo/' + m.id + '">📚 Meu resumo</a><a class="btn sm" href="#/quiz?m=' + m.id + '&n=10">✏️ Praticar 10 questões</a></div><div class="card list">';
+    h += '<div class="row noprint" style="margin-bottom:.6rem"><a class="btn sm" href="pdf/apostila-' + pdfKey() + '-' + m.id + '.pdf" target="_blank" rel="noopener">⬇ Apostila em PDF</a><a class="btn sm" href="#/resumo/' + m.id + '">📚 Meu resumo</a><a class="btn sm" href="#/quiz?m=' + m.id + '&n=10">✏️ Praticar 10 questões</a></div><div class="card list">';
     topsOf(m).forEach(function (t) {
       var d = [1, 2, 3].map(function (v) { return topicDone(m.id, t.id, v) ? '●' : '○'; }).join(' ');
       h += '<a class="item" href="#/aula/' + m.id + '/' + t.id + '"><span class="dot" style="background:' + m.cor + '"></span><span style="flex:1"><b>' + esc(t.titulo) + '</b><br><span class="small mut">' + qsOf(m.id, t.id).length + ' questões' + (t.provavel ? ' · provável' : '') + '</span></span><span title="Voltas 1, 2 e 3" class="small mut">' + d + '</span></a>';
@@ -904,14 +909,14 @@
     var links = S.links[k] || [], ab = [0, 1, 2].indexOf(+aba) >= 0 ? +aba : 0;
     marcaVisto(mid, tid, ab);
     var h = '<p class="noprint"><a href="#/materia/' + mid + '">← ' + esc(m.nome) + '</a></p><div class="lesson"><h1>' + esc(t.titulo) + '</h1>';
-    h += '<div class="row noprint">' + (t.provavel ? '<span class="pill warn">conteúdo provável · confirmar no edital</span>' : '') + '</div>';
+    h += '<div class="row noprint">' + (t.conf ? '<span class="pill ok">' + (t.parcial ? 'parcialmente confirmado: só a Lei de Acesso à Informação consta no Anexo IV' : 'confirmado no edital (Anexo IV, retificação nº 27/2026)') + '</span>' : t.provavel ? '<span class="pill warn">conteúdo provável · confirmar no edital</span>' : '') + '</div>';
     h += '<div class="tabs noprint" role="tablist"><button class="tab' + (ab === 0 ? ' on' : '') + '" data-l="0">1 · Contexto</button><button class="tab' + (ab === 1 ? ' on' : '') + '" data-l="1">2 · Básico</button><button class="tab' + (ab === 2 ? ' on' : '') + '" data-l="2">3 · Aprofundado</button></div>';
     h += '<div class="card"><div class="lvl' + (ab === 0 ? ' on' : '') + '" data-l="0"><h3 class="print-only">1 · Contexto</h3>' + t.contexto + '</div><div class="lvl' + (ab === 1 ? ' on' : '') + '" data-l="1"><h3 class="print-only">2 · Básico</h3>' + t.basico + '</div><div class="lvl' + (ab === 2 ? ' on' : '') + '" data-l="2"><h3 class="print-only">3 · Aprofundado</h3>' + t.aprofundado + '</div></div></div>';
     h += '<div class="card noprint"><h3 style="margin-top:0">Material de apoio</h3><p class="small mut">Busque aulas e resumos já prontos ou baixe a apostila gerada para este edital.</p><div class="row">' +
       '<a class="btn sm" target="_blank" rel="noopener" href="' + ytUrl(t.busca) + '">▶ Videoaulas no YouTube</a>' +
       '<a class="btn sm" target="_blank" rel="noopener" href="' + gUrl(t.busca) + '">📄 PDFs resumidos (Google)</a>' +
       '<a class="btn sm" target="_blank" rel="noopener" href="' + gUrl2(t.titulo + ' concurso') + '">🔎 Google</a>' +
-      '<a class="btn sm" target="_blank" rel="noopener" href="pdf/apostila-' + S.nivel + '-' + mid + '.pdf">⬇ Apostila PDF (' + esc(m.nome) + ')</a>' +
+      '<a class="btn sm" target="_blank" rel="noopener" href="pdf/apostila-' + pdfKey() + '-' + mid + '.pdf">⬇ Apostila PDF (' + esc(m.nome) + ')</a>' +
       '<button class="btn sm" id="b-print">🖨 Salvar esta aula em PDF</button></div>';
     h += '<div id="mylinks" style="margin-top:.6rem">' + links.map(function (l, i) { return '<div class="row small"><a target="_blank" rel="noopener" href="' + esc(l.url) + '">' + esc(l.t) + '</a><button class="btn sm" data-del="' + i + '" aria-label="Remover">✕</button></div>'; }).join('') + '</div>' +
       '<details style="margin-top:.5rem"><summary class="small">+ Adicionar meu link (vídeo ou PDF)</summary><label for="lk-t">Título</label><input type="text" id="lk-t" placeholder="Ex.: Aula de crase do canal X"><label for="lk-u">Endereço (https://...)</label><input type="url" id="lk-u" placeholder="https://"><p><button class="btn sm pri" id="lk-add">Salvar link</button></p></details></div>';
@@ -1012,7 +1017,7 @@
     var cur = loadSim();
     var h = '<h1>Simulados</h1>';
     if (cur) h += '<div class="card"><b>Você tem um simulado em andamento.</b><p><a class="btn pri" href="#/simulado">Continuar</a> <button class="btn" id="sim-drop">Descartar</button></p></div>';
-    var D = C.dist[S.nivel], dq = D.q, tot = Object.keys(dq).reduce(function (a, k) { return a + dq[k]; }, 0), mins = Math.round(tot * 3.6);
+    var D = distAtual(), dq = D.q, tot = Object.keys(dq).reduce(function (a, k) { return a + dq[k]; }, 0), mins = Math.round(tot * 3.6);
     var dtxt = mats().map(function (m) { return m.nome.replace('Conhecimentos ', '').replace(' (RO e Porto Velho)', '') + ' ' + dq[m.id]; }).join(', ');
     h += '<div class="card"><h3 style="margin-top:0">Simulado ' + esc(nvInfo().nome) + '</h3><p>' + tot + ' questões · ' + Math.floor(mins / 60) + ' h ' + pad(mins % 60) + ' min · distribuição: ' + esc(dtxt) + '.' + (S.concurso === 'semed' && S.nivel === 'medio' ? ' Ideal fazer às <b>9h15</b> de sábado, no horário real.' : '') + '</p>' +
       (estrConf() ? '' : '<p class="aviso">Estrutura <b>estimada</b>: não li o edital deste concurso/nível. Confira quantidade e distribuição reais no edital do seu cargo.</p>') +
@@ -1199,31 +1204,56 @@
   }
 
   /* ---------- Edital ---------- */
+  /* ---------- Concursos por categoria (municipal, estadual, federal) ---------- */
+  function vConcursos() {
+    var h = '<h1>Concursos por categoria</h1><p class="mut">Escolha o concurso que você vai estudar. Os dados vêm de notícias e dos editais; <b>confirme sempre no edital oficial da banca</b>. A data de atualização é 30/10/2026.</p>';
+    C.esferas.forEach(function (es) {
+      var lista = C.concursos.filter(function (cc) { return cc.esfera === es.id; });
+      h += '<h2>' + es.icone + ' ' + es.nome + '</h2>';
+      if (!lista.length) h += '<div class="card mut">Nenhum concurso nesta categoria ainda.</div>';
+      lista.forEach(function (cc) {
+        var meus = inscs().filter(function (i) { return i.c === cc.id; }), d = cc.prova && cc.prova.length > 10 ? diasPara(cc.prova) : null;
+        h += '<div class="card"><div class="row"><b>' + esc(cc.nome) + '</b><span class="pill">' + esc(cc.banca) + '</span>' + (meus.length ? '<span class="pill ok">na sua lista</span>' : '') + '<span class="sp"></span><span class="small mut">' + esc(cc.prova ? 'Prova: ' + provaTxt(cc) + (d !== null && d >= 0 ? ' · faltam ' + d + ' dia(s)' : '') : 'Prova: sem data oficial') + '</span></div>' +
+          '<div class="small mut" style="margin:.2rem 0">' + esc(cc.completo) + '</div><p class="small" style="margin:.4rem 0">' + esc(cc.status) + '</p>' +
+          '<div class="row" style="flex-wrap:wrap;gap:.4rem"><span class="small mut">Estudar como:</span>' + cc.niveis.map(function (n) { return '<button class="btn sm' + (S.concurso === cc.id && S.nivel === n ? ' pri' : '') + '" data-cc="' + cc.id + '" data-n="' + n + '">' + esc(nomeNivel(n)) + '</button>'; }).join('') + '<a class="btn sm" target="_blank" rel="noopener" href="' + esc(cc.busca) + '">Site da banca / busca</a></div></div>';
+      });
+    });
+    $app.innerHTML = h;
+    Array.prototype.forEach.call($app.querySelectorAll('button[data-cc]'), function (b) {
+      b.onclick = function () {
+        var c = b.getAttribute('data-cc'), n = b.getAttribute('data-n');
+        if (!inscs().some(function (i) { return i.c === c && i.n === n; })) { S.perfil.insc.push({ c: c, n: n }); if (S.perfil.niveis.indexOf(n) < 0) S.perfil.niveis.push(n); }
+        setAlvo(c, n); save(); marcaSessao(); toast('Agora você estuda: ' + rotulo({ c: c, n: n })); go('#/');
+      };
+    });
+  }
+
   function vEdital() {
     $app.innerHTML = '<h1>Edital e regras da prova</h1>' +
       (!estrConf() ? '<div class="aviso">Esta tela resume o cargo de <b>nível médio</b> da SEMED (edital 24/2026). Para a sua inscrição (' + esc(rotulo({ c: S.concurso, n: S.nivel })) + ', banca ' + esc(concInfo(S.concurso).banca) + '), consulte o Anexo I (cargos) e o Anexo IV (conteúdos) do edital: <b>A CONFIRMAR NO EDITAL</b>.</div>' : '') +
-      '<div class="aviso">Informações do corpo do <b>Edital SEMED nº 24/2026</b> (lido em 10/10/2026) e de reportagens de 29/10/2026. O <b>Anexo IV (conteúdos) não consta nesse PDF</b>: baixe-o no site da banca e compare com a trilha. <b>Nada aqui substitui o edital oficial.</b></div>' +
-      '<div class="card"><h3 style="margin-top:0">Links oficiais</h3><div class="res"><a target="_blank" rel="noopener" href="https://www.ibgpconcursos.com.br">Site da banca IBGP (inscrição, anexos, avisos)</a><a target="_blank" rel="noopener" href="https://dhg1h5j42swfq.cloudfront.net/2026/09/29180921/00-edital-concurso-porto-velho_semed_final.pdf">PDF do edital SEMED nº 24/2026 (corpo, sem anexos)</a></div></div>' +
+      '<div class="aviso">Informações do corpo do <b>Edital SEMED nº 24/2026</b>, da <b>retificação nº 27/2026 (09/10/2026)</b>, lida em 30/10/2026, e de reportagens. O conteúdo oficial de <b>Legislação</b> (ensino médio) está confirmado abaixo; o texto completo do Anexo IV de Português, Lógica, Gerais e Específicos <b>não veio</b> nos PDFs que consegui ler: baixe no site da banca e compare com a trilha. <b>Nada aqui substitui o edital oficial.</b></div>' +
+      '<div class="card"><h3 style="margin-top:0">Links oficiais</h3><div class="res"><a target="_blank" rel="noopener" href="https://www.ibgpconcursos.com.br">Site da banca IBGP (inscrição, anexos, avisos)</a><a target="_blank" rel="noopener" href="https://dhg1h5j42swfq.cloudfront.net/2026/09/29180921/00-edital-concurso-porto-velho_semed_final.pdf">PDF do edital SEMED nº 24/2026 (corpo, sem anexos)</a><a target="_blank" rel="noopener" href="https://www.portovelho.ro.gov.br/uploads/arquivos/RETIFICA%C3%87%C3%83O%20DO%20EDITAL%20N%C2%BA%2024%20SEMED.pdf">Retificação nº 27/2026 (Anexos I a IV, parcial)</a></div></div>' +
+      '<div class="card"><h3 style="margin-top:0">Conteúdo oficial de Legislação (ensino médio · Anexo IV, retificação nº 27/2026)</h3><ul><li>Lei Orgânica do Município de Porto Velho/RO e atualizações.</li><li>Regime Jurídico dos Servidores Públicos Municipais (Lei Municipal nº 385/2010).</li><li>Plano de Carreira, Cargos e Remuneração dos Profissionais da Educação da Rede Pública Municipal (Leis Municipais nº 360/2009 e nº 391/2010).</li><li>Lei Brasileira de Inclusão (Estatuto da Pessoa com Deficiência).</li><li>Constituição Federal: Título I (Princípios Fundamentais); Título II, arts. 5º a 13; Título III, Cap. IV (Municípios: arts. 29, 29-A, 30 e 31) e Cap. VII (Administração Pública: arts. 37, 38 e 39).</li><li>Lei de Licitações (Lei Federal nº 14.133/2021).</li><li>Lei de Acesso à Informação (Lei Federal nº 12.527/2011) e normas estadual e municipal, se houver.</li></ul><p class="small mut">A retificação diz que vale a legislação vigente até a publicação do edital, com as alterações posteriores das normas citadas. <b>A LDB não aparece nessa lista de Legislação</b>: ela pode vir nos Específicos (conferir no Anexo IV).</p></div>' +
       '<div class="card"><h3 style="margin-top:0">SEMED · Agente de Secretaria Escolar (nível médio)</h3><table>' +
       '<tr><th>Banca</th><td>IBGP</td></tr><tr><th>Prova objetiva</th><td>Domingo 06/12/2026, 9h15 (3 h), 50 questões, 5 alternativas, 1 correta</td></tr>' +
       '<tr><th>Distribuição</th><td>Português 10 · Raciocínio Lógico 10 · Legislação 10 · Específicos 15 · Gerais 5</td></tr>' +
       '<tr><th>Aprovação</th><td>No mínimo 50% do total de pontos (item 10.1)</td></tr>' +
-      '<tr><th>Inscrições</th><td>13/10 a 11/11/2026 (pagamento até 12/11), R$ 90 nível médio - conferir</td></tr>' +
+      '<tr><th>Inscrições</th><td>13/10 a 11/11/2026 (pagamento até 12/11), R$ 90 nível médio - conferir</td></tr><tr><th>Vagas (todo o edital)</th><td>430: 165 imediatas + 265 de cadastro de reserva (Anexo I, retificação nº 27/2026)</td></tr>' +
       '<tr><th>Remuneração</th><td>R$ 1.820,78 · 40 h semanais - conferir no Anexo I</td></tr>' +
       '<tr><th>Desempate</th><td>1º idoso (60+); 2º Específicos; 3º Português; 4º Legislação; 5º Raciocínio Lógico; 6º Gerais; 7º jurado; 8º idade maior (item 10.4)</td></tr></table></div>' +
       '<div class="card"><h3 style="margin-top:0">Regras do dia da prova (itens 9.3 e 9.2)</h3><ul><li>Caneta esferográfica <b>azul ou preta</b>, de corpo transparente.</li><li><b>Assinar</b> a Folha de Respostas (igual ao documento). Sem assinatura = eliminação.</li><li>Marque <b>uma</b> alternativa por questão; rasuras/emendas ou duas marcações anulam a questão.</li><li>Não amasse nem dobre a folha; não há substituição por erro do candidato.</li><li>Só pode sair definitivamente entregando a Folha de Respostas.</li><li>Não encontrei no corpo do edital desconto por erro: <b>confirmar no Anexo III</b>.</li></ul></div>' +
       '<div class="card"><h3 style="margin-top:0">Recursos (item 11)</h3><p>Fundamentado, sem identificação, até 3.000 caracteres, citando referência completa (capítulo e página). Questão anulada: ponto para todos.</p></div>' +
-      '<div class="card"><h3 style="margin-top:0">Outros concursos</h3><ul><li><b>SEMUSA (IBGP)</b>: edital nº 25/2026 publicado, 2.248 vagas, inscrições até 11/11, prova prevista para 13/12/2026.</li><li><b>IPAM (IBADE)</b>: edital publicado, ~70 vagas, inscrições de 03/11 a 07/12/2026, provas previstas em 21 e 28/02/2027.</li><li><b>SESAU-RO (IDECAN)</b>: banca definida, edital ainda não confirmado. Acompanhe os sites das bancas.</li></ul></div>';
+      '<div class="card"><h3 style="margin-top:0">Outros concursos</h3><ul><li><b>Polícia Federal (Cebraspe)</b>: último edital em 2025; novo edital ainda não confirmado. Veja a categoria Federal em <a href="#/concursos">Concursos</a>.</li><li><b>SEMUSA (IBGP)</b>: edital nº 25/2026 publicado, 2.248 vagas, inscrições até 11/11, prova prevista para 13/12/2026.</li><li><b>IPAM (IBADE)</b>: edital publicado, ~70 vagas, inscrições de 03/11 a 07/12/2026, provas previstas em 21 e 28/02/2027.</li><li><b>SESAU-RO (IDECAN)</b>: banca definida, edital ainda não confirmado. Acompanhe os sites das bancas.</li></ul></div>';
   }
 
   /* ---------- Mais / Config ---------- */
   function vMais() {
-    $app.innerHTML = '<h1>Mais</h1><div class="card list">' + [['#/erros', '📓 Caderno de erros'], ['#/revisao', '🔁 Revisão espaçada'], ['#/cronograma', '📅 Cronograma'], ['#/resumo', '📚 Resumo do que estudei'], ['#/edital', '📄 Edital e regras da prova'], ['#/conta', '👤 Minha conta e sair']].concat(mostraAreaDono() ? [['#/dono', '🛡️ Área do dono']] : []).concat([ ['#/config', '⚙️ Ajustes e backup']]).map(function (x) { return '<a class="item" href="' + x[0] + '">' + x[1] + '</a>'; }).join('') + '</div>';
+    $app.innerHTML = '<h1>Mais</h1><div class="card list">' + [['#/erros', '📓 Caderno de erros'], ['#/revisao', '🔁 Revisão espaçada'], ['#/cronograma', '📅 Cronograma'], ['#/resumo', '📚 Resumo do que estudei'], ['#/concursos', '🗂️ Concursos por categoria'], ['#/edital', '📄 Edital e regras da prova'], ['#/conta', '👤 Minha conta e sair']].concat(mostraAreaDono() ? [['#/dono', '🛡️ Área do dono']] : []).concat([ ['#/config', '⚙️ Ajustes e backup']]).map(function (x) { return '<a class="item" href="' + x[0] + '">' + x[1] + '</a>'; }).join('') + '</div>';
   }
   function vConfig() {
     $app.innerHTML = '<h1>Ajustes</h1><div class="card"><h3 style="margin-top:0">Meu cadastro</h3><p class="small mut" style="margin:0 0 .4rem">Conta: ' + esc(mostraLogin((usuarioAtual() || {}).login || '')) + ' · <a href="#/conta">Minha conta / sair</a></p><p class="small">' + esc(S.perfil.nome) + ' · ' + inscs().map(rotulo).map(esc).join(', ') + '</p><label for="nv">Estou estudando para</label><select id="nv">' + inscs().map(function (i, k) { return '<option value="' + k + '"' + (i.c === S.concurso && i.n === S.nivel ? ' selected' : '') + '>' + esc(rotulo(i)) + '</option>'; }).join('') + '</select><p class="small mut">Muda os tópicos, questões, simulado e apostilas. Seu progresso é mantido.</p><a class="btn sm" href="#/cadastro">✎ Editar cadastro / adicionar nível</a></div><div class="card"><h3 style="margin-top:0">Minha meta</h3><label for="mn">Meta de acertos na prova (%) - a nota mínima é 50%</label><input type="number" id="mn" min="50" max="100" value="' + metaNota() + '"><label for="mq">Questões por dia</label><input type="number" id="mq" min="5" max="200" value="' + (S.metaq || 30) + '"></div><div class="card"><label for="meta">Meta semanal (etapas concluídas por semana)</label><input type="number" id="meta" min="1" max="40" value="' + S.meta + '"></div>' +
       '<div class="card"><h3 style="margin-top:0">Backup do progresso</h3><p class="small mut">O progresso desta conta fica salvo neste aparelho. Para levar a outro (celular ↔ PC), exporte e importe o arquivo.</p><div class="row"><button class="btn" id="exp">⬇ Exportar</button><label class="btn" for="imp" style="margin:0">⬆ Importar</label><input type="file" id="imp" accept=".json,application/json" hidden></div></div>' +
-      '<div class="card"><h3 style="margin-top:0">Apostilas em PDF</h3><div class="res">' + mats().map(function (m) { return '<a target="_blank" rel="noopener" href="pdf/apostila-' + S.nivel + '-' + m.id + '.pdf">' + esc(m.nome) + '</a>'; }).join('') + '<a target="_blank" rel="noopener" href="pdf/apostila-' + S.nivel + '-completa.pdf"><b>Apostila completa (' + esc(nvInfo().nome) + ')</b></a></div></div>' +
+      '<div class="card"><h3 style="margin-top:0">Apostilas em PDF</h3><div class="res">' + mats().map(function (m) { return '<a target="_blank" rel="noopener" href="pdf/apostila-' + pdfKey() + '-' + m.id + '.pdf">' + esc(m.nome) + '</a>'; }).join('') + '<a target="_blank" rel="noopener" href="pdf/apostila-' + pdfKey() + '-completa.pdf"><b>Apostila completa (' + esc(nvInfo().nome) + ')</b></a></div></div>' +
       '<div class="card"><h3 style="margin-top:0">Zerar tudo</h3><button class="btn" id="rst" style="color:var(--bad)">Apagar o progresso desta conta</button></div>';
     document.getElementById('nv').onchange = function (e) { var i = inscs()[+e.target.value]; setAlvo(i.c, i.n); save(); toast('Estudando: ' + rotulo(i)); vConfig(); };
     document.getElementById('mn').onchange = function (e) { S.metaNota = Math.min(100, Math.max(50, +e.target.value || 70)); save(); toast('Meta salva'); };

@@ -1,9 +1,9 @@
 M({
   id: 'legislacao', nome: 'Legislação', cor: '#b45309', questoes: 10, peso: '20%',
-  banca: 'Separe "lei seca" (texto da lei) de explicação. A lista exata (Lei Orgânica, Estatuto dos Servidores de Porto Velho etc.) é A CONFIRMAR NO ANEXO IV do edital.',
+  banca: 'Lista oficial (ensino médio SEMED, Anexo IV retificado pelo Edital nº 27/2026): Lei Orgânica de Porto Velho; Lei Municipal nº 385/2010 (servidores); Leis nº 360/2009 e nº 391/2010 (plano de carreira da educação); Lei Brasileira de Inclusão; CF (Título I; arts. 5º a 13; arts. 29, 29-A, 30, 31, 37, 38 e 39); Lei nº 14.133/2021 (licitações); Lei nº 12.527/2011 (acesso à informação). Separe "lei seca" de explicação.',
   topicos: [
     {
-      id: 'cf-art37', titulo: 'Constituição Federal: Administração Pública (art. 37)', provavel: true,
+      id: 'cf-art37', titulo: 'Constituição Federal: Administração Pública (art. 37)', conf: true,
       busca: 'art 37 constituição federal princípios administração pública LIMPE resumo concursos',
       contexto: `<p>O art. 37 da Constituição Federal é a "regra de ouro" de quem trabalha em prefeitura ou escola pública: define como a administração deve agir e como os servidores entram na carreira.</p>`,
       basico: `<ul>
@@ -36,7 +36,7 @@ M({
 </ul>`
     },
     {
-      id: 'ldb', titulo: 'LDB - Lei nº 9.394/1996', provavel: true,
+      id: 'ldb', titulo: 'LDB - Lei nº 9.394/1996 (provável em Específicos)', provavel: true,
       busca: 'LDB lei 9394 96 resumo para concurso secretaria escolar educação básica',
       contexto: `<p>A LDB (Lei de Diretrizes e Bases da Educação Nacional) é a lei geral da educação brasileira. Para a SEMED, é matéria central: define níveis de ensino, carga horária e responsabilidades dos municípios.</p>`,
       basico: `<ul>
@@ -54,9 +54,9 @@ M({
 </ul>`
     },
     {
-      id: 'lei-organica', titulo: 'Lei Orgânica e Estatuto dos Servidores de Porto Velho', provavel: true,
+      id: 'lei-organica', titulo: 'Lei Orgânica e Estatuto dos Servidores de Porto Velho (Lei nº 385/2010)', conf: true,
       busca: 'Lei Orgânica do Município de Porto Velho PDF estatuto dos servidores públicos municipais',
-      contexto: `<p>Lei Orgânica é como a "constituição do município" (CF, art. 29). O Estatuto dos Servidores trata de direitos, deveres e punições dos servidores municipais.</p><p class="aviso"><b>A CONFIRMAR NO EDITAL:</b> números das leis e artigos cobrados. Não decore artigos de memória: estude o texto oficial indicado no Anexo IV.</p>`,
+      contexto: `<p>Lei Orgânica é como a "constituição do município" (CF, art. 29). O Estatuto dos Servidores trata de direitos, deveres e punições dos servidores municipais.</p><p class="aviso"><b>Confirmado no Anexo IV (retificação nº 27/2026):</b> Lei Orgânica do Município de Porto Velho e Regime Jurídico dos Servidores (Lei Municipal nº 385/2010). Os <b>artigos</b> que cairão continuam A CONFIRMAR. Não decore artigos de memória: estude o texto oficial indicado no Anexo IV.</p>`,
       basico: `<ul>
 <li><b>Lei Orgânica (art. 29 CF):</b> o município se rege por lei orgânica, votada em dois turnos com intervalo mínimo de dez dias e aprovada por dois terços dos membros da Câmara.</li>
 <li><b>Estatuto dos servidores:</b> normalmente trata de provimento, posse, exercício, vacância, direitos (férias, licenças), deveres, proibições e penalidades.</li>
@@ -68,7 +68,7 @@ M({
 </ul>`
     },
     {
-      id: 'transparencia-etica', titulo: 'Transparência, ética e improbidade', provavel: true,
+      id: 'transparencia-etica', titulo: 'Transparência, ética e improbidade', conf: true, parcial: true,
       busca: 'Lei de Acesso à Informação 12527 resumo ética servidor público improbidade administrativa 8429',
       contexto: `<p>Três pilares do dia a dia do servidor: informar o cidadão (LAI), agir com ética e responder por abusos (improbidade).</p>`,
       basico: `<ul>
