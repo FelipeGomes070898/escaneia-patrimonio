@@ -91,3 +91,10 @@ A área do dono mostra **quantas pessoas se cadastraram no site inteiro**. É um
 - A tela **Concursos** (Mais → Concursos por categoria) lista os concursos em **Municipal** (SEMED, SEMUSA, IPAM), **Estadual** (SESAU-RO) e **Federal** (Polícia Federal), com banca, situação do edital, data da prova e botão para estudar cada nível. O cadastro também agrupa por categoria.
 - **Polícia Federal (Cebraspe, nível superior)**: trilha própria (Português e Raciocínio Lógico comuns, mais Direito Constitucional, Administrativo, Penal, Processual Penal, Legislação Especial e Informática), 40 questões comentadas e apostilas `pdf/apostila-pf-*.pdf`. **A estrutura é estimada**: não saiu edital novo em fonte oficial (último: 2025). Conferir no edital.
 - **SEMED, nível médio**: a retificação nº 27/2026 (09/10/2026) trouxe o Anexo IV de **Legislação** (Lei Orgânica, Lei 385/2010, Leis 360/2009 e 391/2010, Lei Brasileira de Inclusão, CF arts. 5º a 13 e 29 a 39, Lei 14.133/2021 e Lei 12.527/2011). Esses tópicos aparecem marcados como **confirmados no edital**; Português, Lógica, Gerais e Específicos continuam prováveis (o texto do Anexo IV não veio nos PDFs acessíveis).
+
+## Estudo conforme a banca
+Cada concurso usa o perfil da sua banca (`CONC.bancas` em `data/core.js`): **IBGP** (SEMED, SEMUSA), **IBADE** (IPAM), **IDECAN** (SESAU-RO) e **Cebraspe** (PF).
+- A tela **Estilo da banca** (Mais → Estilo da banca) mostra formato, pontuação, como a banca cobra e a estratégia para acertar o máximo (marcar tudo, não zerar disciplina, quando chutar).
+- Os **simulados** usam o ritmo da banca (minutos por questão) e a correção cita a regra da banca; na IBADE o resultado avisa se alguma disciplina foi zerada.
+- Na **Cebraspe (PF)** as questões viram itens **Certo/Errado** no treino e no simulado, com pontuação **+1 / −1 / 0 (em branco)**, nota líquida e orientação de quando deixar em branco.
+- As regras das bancas vêm de editais lidos e de notícias de 30/10/2026; confirme sempre no edital do seu cargo. A estrutura de IPAM, SEMUSA, SESAU-RO e PF continua estimada.
