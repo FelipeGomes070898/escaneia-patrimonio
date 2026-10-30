@@ -12,7 +12,7 @@
   function chaveSim() { return 'estudo.sim.' + UID; }
 
   /* ---------- Estado ---------- */
-  function defaults() { return { done: {}, answers: {}, erros: {}, rev: {}, notas: {}, links: {}, sims: [], cron: {}, meta: 5, tema: '', nivel: '', concurso: '', perfil: null, dia: {}, metaq: 30, metaNota: 70, visto: {}, retomar: null, quizAtual: null, conclAvisada: {} }; }
+  function defaults() { return { done: {}, answers: {}, erros: {}, rev: {}, notas: {}, links: {}, sims: [], cron: {}, meta: 5, tema: '', nivel: '', concurso: '', perfil: null, dia: {}, metaq: 30, metaNota: 70, visto: {}, retomar: null, quizAtual: null, conclAvisada: {}, rasc: {} }; }
   var S = defaults();
   function carregar() { try { S = Object.assign(defaults(), JSON.parse(lsGet(chave()) || '{}')); } catch (e) { S = defaults(); } }
   function save() { if (UID) lsSet(chave(), JSON.stringify(S)); }
@@ -276,11 +276,11 @@
     ['#/', 'Painel', '🏠'], ['#/trilha', 'Trilha', '🗺️'], ['#/praticar', 'Questões', '✏️'],
     ['#/simulados', 'Simulados', '⏱️'], ['#/mais', 'Mais', '☰']
   ];
-  var SIDE = NAV.slice(0, 4).concat([['#/erros', 'Erros', '📓'], ['#/revisao', 'Revisão', '🔁'], ['#/cronograma', 'Cronograma', '📅'], ['#/banca', 'Banca', '🎯'], ['#/concursos', 'Concursos', '🗂️'], ['#/edital', 'Edital', '📄'], ['#/conta', 'Conta', '👤'], ['#/config', 'Ajustes', '⚙️']]);
+  var SIDE = NAV.slice(0, 4).concat([['#/erros', 'Erros', '📓'], ['#/revisao', 'Revisão', '🔁'], ['#/cronograma', 'Cronograma', '📅'], ['#/duvidas', 'Dúvidas', '💬'], ['#/banca', 'Banca', '🎯'], ['#/concursos', 'Concursos', '🗂️'], ['#/edital', 'Edital', '📄'], ['#/conta', 'Conta', '👤'], ['#/config', 'Ajustes', '⚙️']]);
   function drawNav(h) {
     var cur = h.split('?')[0], chip = document.getElementById('nvchip'), ni = nvInfo();
     if (chip) { chip.hidden = !ni; chip.textContent = ni && S.concurso ? '🎓 ' + concInfo(S.concurso).nome + ' · ' + NV_CURTO[S.nivel] : ''; chip.title = 'Seu nível cadastrado. Toque para trocar.'; }
-    function on(href) { if (href === '#/') return cur === '#/' || cur === ''; if (href === '#/mais') return ['#/mais', '#/erros', '#/revisao', '#/cronograma', '#/edital', '#/concursos', '#/banca', '#/config', '#/conta', '#/resumo', '#/dono'].indexOf(cur) >= 0 || cur.indexOf('#/dono') === 0; return cur.indexOf(href) === 0 || (href === '#/trilha' && /^#\/(materia|aula)/.test(cur)) || (href === '#/praticar' && cur.indexOf('#/quiz') === 0); }
+    function on(href) { if (href === '#/') return cur === '#/' || cur === ''; if (href === '#/mais') return ['#/mais', '#/erros', '#/revisao', '#/cronograma', '#/edital', '#/concursos', '#/banca', '#/duvidas', '#/config', '#/conta', '#/resumo', '#/dono'].indexOf(cur) >= 0 || cur.indexOf('#/dono') === 0; return cur.indexOf(href) === 0 || (href === '#/trilha' && /^#\/(materia|aula)/.test(cur)) || (href === '#/praticar' && cur.indexOf('#/quiz') === 0); }
     var SIDE2 = mostraAreaDono() ? SIDE.concat([['#/dono', 'Dono', '🛡️']]) : SIDE;
     document.getElementById('sidenav').innerHTML = SIDE2.map(function (n) { return '<a href="' + n[0] + '" class="' + (on(n[0]) ? 'on' : '') + '">' + n[1] + '</a>'; }).join('');
     document.getElementById('bottomnav').innerHTML = NAV.map(function (n) { return '<a href="' + n[0] + '" class="' + (on(n[0]) ? 'on' : '') + '"><span class="ic">' + n[2] + '</span>' + n[1] + '</a>'; }).join('');
@@ -302,7 +302,7 @@
     var fn = {
       '': vPainel, trilha: vTrilha, materia: function () { vMateria(p[2]); }, aula: function () { vAula(p[2], p[3], q.aba); },
       praticar: vPraticar, simrev: function () { vSimRev(p[2]); }, quiz: function () { vQuiz(q); }, simulados: vSimulados, simulado: vSimRun, erros: vErros,
-      revisao: vRevisao, dono: function () { if (p[2]) vDonoUser(p[2]); else vDono(); }, resumo: function () { vResumo(p[2]); }, conta: vConta, nivel: vNivel, cadastro: vCadastro, cronograma: vCron, edital: vEdital, concursos: vConcursos, banca: vBanca, config: vConfig, mais: vMais
+      revisao: vRevisao, dono: function () { if (p[2]) vDonoUser(p[2]); else vDono(); }, resumo: function () { vResumo(p[2]); }, conta: vConta, nivel: vNivel, cadastro: vCadastro, cronograma: vCron, edital: vEdital, concursos: vConcursos, banca: vBanca, duvidas: vDuvidas, config: vConfig, mais: vMais
     }[v] || vPainel;
     fn();
     window.scrollTo(0, 0);
@@ -975,6 +975,110 @@
     return h + '</div>';
   }
 
+  /* ---------- Rascunho com calculadora (por questão) ---------- */
+  function calcula(txt) {
+    var e = String(txt).replace(/,/g, '.').replace(/[x×]/gi, '*').replace(/÷/g, '/').replace(/−/g, '-').replace(/\s+/g, '');
+    if (!e || !/^[0-9+\-*/().%]+$/.test(e)) return null;
+    var pos = 0;
+    function num() {
+      var m = /^\d*\.?\d+/.exec(e.slice(pos)); if (!m) throw 0; pos += m[0].length; var v = parseFloat(m[0]);
+      while (e[pos] === '%') { v /= 100; pos++; } return v;
+    }
+    function fat() { if (e[pos] === '(') { pos++; var v = soma(); if (e[pos] !== ')') throw 0; pos++; while (e[pos] === '%') { v /= 100; pos++; } return v; } if (e[pos] === '-') { pos++; return -fat(); } if (e[pos] === '+') { pos++; return fat(); } return num(); }
+    function prod() { var v = fat(); while (e[pos] === '*' || e[pos] === '/') { var o = e[pos++], w = fat(); v = o === '*' ? v * w : v / w; } return v; }
+    function soma() { var v = prod(); while (e[pos] === '+' || e[pos] === '-') { var o = e[pos++], w = prod(); v = o === '+' ? v + w : v - w; } return v; }
+    try { var r = soma(); if (pos !== e.length || !isFinite(r)) return null; return r; } catch (x) { return null; }
+  }
+  function fmtNum(v) { return String(Math.round(v * 1e6) / 1e6).replace('.', ','); }
+  function rascunhoHtml(qid) {
+    return '<details class="rasc" data-q="' + esc(qid) + '"' + ((S.rasc || {})[qid] ? ' open' : '') + '><summary>📝 Rascunho e calculadora</summary><textarea class="ra-t" rows="4" placeholder="Anote e faça contas aqui. Fica salvo nesta questão.">' + esc((S.rasc || {})[qid] || '') + '</textarea>' +
+      '<div class="row" style="margin-top:.3rem"><input type="text" class="ra-c" inputmode="decimal" placeholder="Conta: 25+20-35 ou (40-5)*2 ou 15%" aria-label="Calculadora"><button type="button" class="btn sm ra-ok">=</button></div><div class="small ra-r" style="min-height:1.3em;margin-top:.2rem"></div></details>';
+  }
+  function ligaRascunho(root) {
+    Array.prototype.forEach.call(root.querySelectorAll('.rasc'), function (d) {
+      var qid = d.getAttribute('data-q'), t = d.querySelector('.ra-t'), c = d.querySelector('.ra-c'), ok = d.querySelector('.ra-ok'), out = d.querySelector('.ra-r'), tm = null, ult = null;
+      t.oninput = function () { clearTimeout(tm); tm = setTimeout(function () { S.rasc = S.rasc || {}; if (t.value) S.rasc[qid] = t.value; else delete S.rasc[qid]; save(); }, 400); };
+      function faz() {
+        var v = calcula(c.value);
+        if (v === null) { out.innerHTML = '<span style="color:var(--bad)">Conta inválida. Use números e + − * / ( ) %.</span>'; ult = null; return; }
+        ult = c.value.trim() + ' = ' + fmtNum(v); out.innerHTML = '<b>' + esc(ult) + '</b> <button type="button" class="btn sm ra-ins">Inserir no rascunho</button>';
+        out.querySelector('.ra-ins').onclick = function () { t.value += (t.value && !/\n$/.test(t.value) ? '\n' : '') + ult; t.oninput(); };
+      }
+      ok.onclick = faz; c.onkeydown = function (ev) { if (ev.key === 'Enter') { ev.preventDefault(); faz(); } };
+    });
+  }
+
+  /* ---------- Tira-dúvidas: glossário, busca nas aulas e atalho para uma IA ---------- */
+  var GLOSS = [
+    ['adjetivo', 'Adjetivo é a palavra que dá qualidade, característica ou estado ao substantivo e concorda com ele em gênero e número. Para achar: pergunte "como é?" sobre o substantivo. Em "O aluno inteligente passou", <b>inteligente</b> é adjetivo (como é o aluno? inteligente). Exemplos: casa <b>grande</b>, menina <b>simpática</b>, alunos <b>aplicados</b>, "O aluno está <b>cansado</b>". Estuda (verbo), ontem (advérbio), com (preposição) e ufa (interjeição) não caracterizam substantivo.'],
+    ['substantivo', 'Substantivo é a palavra que dá nome a seres, lugares, sentimentos e coisas (aluno, escola, alegria). Pode ser comum ou próprio, concreto ou abstrato, simples ou composto, e varia em gênero e número.'],
+    ['advérbio', 'Advérbio modifica verbo, adjetivo ou outro advérbio e é invariável: "Estudou <b>muito</b>", "muito bom", "muito bem". Indica tempo, lugar, modo, intensidade, negação, dúvida. Termina em -mente é pista, mas nem todo advérbio termina assim.'],
+    ['verbo', 'Verbo indica ação, estado ou fenômeno e varia em pessoa, número, tempo e modo. Exemplos: estudar, estar, chover.'],
+    ['pronome', 'Pronome acompanha ou substitui o substantivo: eu, você, meu, este, quem, que. Evita repetir o nome.'],
+    ['preposição', 'Preposição liga termos e cria relação entre eles: a, de, em, com, para, por, sobre. Pode se juntar a artigo (de + a = da).'],
+    ['conjunção', 'Conjunção liga orações ou termos e indica a relação: e (adição), mas (oposição), porque (causa), se (condição), portanto (conclusão).'],
+    ['crase', 'Crase é a fusão da preposição "a" com o artigo "a(s)" ou com pronomes: "Fui <b>à</b> escola". Dica: troque a palavra feminina por uma masculina; se aparecer "ao", há crase. Não há crase antes de palavra masculina, verbo ou artigo indefinido.'],
+    ['sujeito', 'Sujeito é o termo sobre o qual se declara algo, e o verbo concorda com ele. Pode ser simples, composto, oculto, indeterminado ou inexistente (oração sem sujeito).'],
+    ['predicado', 'Predicado é o que se declara sobre o sujeito. Pode ser verbal (núcleo é um verbo de ação), nominal (verbo de ligação + característica) ou verbo-nominal.'],
+    ['concordância', 'Concordância é a harmonia do verbo ou do nome com o termo a que se refere, em número e pessoa (verbal) ou gênero e número (nominal). Ex.: "As alunas <b>estudaram</b>"; "casas <b>bonitas</b>".'],
+    ['porcentagem', 'Porcentagem é uma razão com denominador 100. Para achar p% de N, multiplique N por p/100. Aumento de p%: multiplique por (1 + p/100); desconto: por (1 − p/100). Aumentos sucessivos se multiplicam, não se somam.'],
+    ['regra de três', 'Regra de três compara grandezas. Diretamente proporcionais: aumentam juntas (multiplica cruzado). Inversamente proporcionais: uma aumenta e a outra diminui (multiplica em linha).'],
+    ['conjuntos', 'Para dois conjuntos: n(A ∪ B) = n(A) + n(B) − n(A ∩ B). Quem está nos dois é contado duas vezes, então subtraia a interseção uma vez.'],
+    ['licitação', 'Licitação é o processo pelo qual o poder público escolhe a proposta mais vantajosa para comprar ou contratar. Hoje é regida pela Lei nº 14.133/2021.']
+  ];
+  function semAcento(t) { return String(t).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
+  var STOP = 'a o as os um uma de do da dos das em no na nos nas por para com sem que e ou se ao aos eu me meu minha ser e eh sim nao tambem como qual quais quando onde porque pq isso isso essa esse este esta quero queria sobre fazer faz mais mas ja so'.split(' ');
+  function buscaDuvida(pergunta) {
+    var q = semAcento(pergunta), out = { gloss: [], topicos: [] };
+    GLOSS.forEach(function (g) { if (q.indexOf(semAcento(g[0])) >= 0) out.gloss.push(g); });
+    var termos = q.replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(function (w) { return w.length > 2 && STOP.indexOf(w) < 0; });
+    if (!termos.length) return out;
+    var lista = [];
+    C.materias.forEach(function (m) { m.topicos.forEach(function (t) {
+      var corpo = semAcento((t.contexto + ' ' + t.basico + ' ' + t.aprofundado).replace(/<[^>]+>/g, ' ')), tit = semAcento(t.titulo), sc = 0, i0 = -1;
+      termos.forEach(function (w) { if (tit.indexOf(w) >= 0) sc += 3; var k = corpo.indexOf(w); if (k >= 0) { sc += 1; if (i0 < 0 || k < i0) i0 = k; } });
+      if (sc > 0) lista.push({ m: m, t: t, sc: sc, trecho: i0 >= 0 ? (t.contexto + ' ' + t.basico + ' ' + t.aprofundado).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : '', i0: i0 });
+    }); });
+    lista.sort(function (a, b) { return b.sc - a.sc; });
+    out.topicos = lista.slice(0, 3).map(function (x) {
+      var txt = x.trecho, ini = Math.max(0, Math.min(txt.length, semAcento(txt).indexOf(termos.filter(function (w) { return semAcento(txt).indexOf(w) >= 0; })[0] || '') - 60));
+      return { m: x.m, t: x.t, trecho: (ini > 0 ? '… ' : '') + txt.slice(ini, ini + 260) + (ini + 260 < txt.length ? ' …' : '') };
+    });
+    return out;
+  }
+  function duvidaHtml(qid) {
+    return '<details class="duvida" data-q="' + esc(qid || '') + '"' + (qid ? '' : ' open') + '><summary>💬 Tire uma dúvida' + (qid ? ' sobre esta questão' : '') + '</summary>' +
+      '<p class="small mut" style="margin:.3rem 0">Escreva a sua pergunta. O site <b>procura nas aulas e no glossário</b> e deixa pronto o texto para levar a uma <b>inteligência artificial</b> (o site não tem IA própria: ele funciona sem servidor).</p>' +
+      '<textarea class="du-t" rows="3" placeholder="Ex.: então se eu escrever &quot;o aluno inteligente passou&quot;, inteligente também é adjetivo? Se não, explique."></textarea>' +
+      '<div class="row" style="flex-wrap:wrap;gap:.4rem;margin-top:.3rem"><button type="button" class="btn sm pri du-busca">Buscar no material do site</button><button type="button" class="btn sm du-claude">Perguntar ao Claude</button><button type="button" class="btn sm du-gpt">Perguntar ao ChatGPT</button><button type="button" class="btn sm du-copia">Copiar pergunta</button></div><div class="du-res" style="margin-top:.5rem"></div></details>';
+  }
+  function ligaDuvidas(root) {
+    Array.prototype.forEach.call(root.querySelectorAll('.duvida'), function (d) {
+      var qid = d.getAttribute('data-q'), q = qid ? qById(qid) : null, t = d.querySelector('.du-t'), res = d.querySelector('.du-res');
+      function prompt() {
+        var base = 'Sou aluno estudando para concurso (' + concInfo(S.concurso).nome + ', banca ' + concInfo(S.concurso).banca + '). Explique de forma simples, com exemplos e dicas de prova.\n';
+        if (q) base += '\nQuestão: ' + q.q + '\n' + q.a.map(function (a, k) { return LET[k] + ') ' + a; }).join('\n') + '\nGabarito do site: ' + LET[q.g] + '\n';
+        return base + '\nMinha dúvida: ' + t.value.trim();
+      }
+      function ok() { if (!t.value.trim()) { res.innerHTML = '<span class="small" style="color:var(--bad)">Escreva a sua dúvida primeiro.</span>'; return false; } return true; }
+      d.querySelector('.du-busca').onclick = function () {
+        if (!ok()) return; var b = buscaDuvida(t.value), h = '';
+        b.gloss.forEach(function (g) { h += '<div class="card" style="border-left:5px solid var(--ok)"><b>Resposta rápida: ' + esc(g[0]) + '</b><p style="margin:.3rem 0">' + g[1] + '</p></div>'; });
+        if (b.topicos.length) h += '<div class="small mut" style="margin:.3rem 0">Nas aulas do site:</div>' + b.topicos.map(function (x) { return '<div class="card"><a href="#/aula/' + x.m.id + '/' + x.t.id + '"><b>' + esc(x.t.titulo) + '</b></a> <span class="small mut">' + esc(x.m.nome) + '</span><p class="small" style="margin:.3rem 0">' + esc(x.trecho) + '</p></div>'; }).join('');
+        if (!h) h = '<div class="card">Não achei nada parecido nas aulas. Tente outras palavras ou use o botão para perguntar a uma IA.</div>';
+        res.innerHTML = h;
+      };
+      function abre(url) { if (!ok()) return; var p = prompt(); try { navigator.clipboard && navigator.clipboard.writeText(p).catch(function () { }); } catch (e) { } window.open(url + encodeURIComponent(p), '_blank', 'noopener'); toast('Pergunta pronta e copiada'); }
+      d.querySelector('.du-claude').onclick = function () { abre('https://claude.ai/new?q='); };
+      d.querySelector('.du-gpt').onclick = function () { abre('https://chatgpt.com/?q='); };
+      d.querySelector('.du-copia').onclick = function () { if (!ok()) return; var p = prompt(); try { navigator.clipboard.writeText(p).then(function () { toast('Pergunta copiada'); }, function () { toast('Não consegui copiar'); }); } catch (e) { toast('Não consegui copiar'); } };
+    });
+  }
+  function vDuvidas() {
+    $app.innerHTML = '<h1>Tire dúvidas</h1><p class="mut">Pergunte qualquer coisa sobre a matéria. O site procura no glossário e nas aulas; para uma explicação sob medida, leve a pergunta pronta a uma IA.</p><div class="card">' + duvidaHtml('') + '</div>';
+    ligaDuvidas($app);
+  }
+
   /* ---------- Quiz com correção imediata ---------- */
   function vPraticar() {
     var h = '<h1>Questões</h1>' + (isCE() ? '<div class="aviso"><b>Modo ' + esc(bancaAtual().nome) + ':</b> as questões aparecem como itens <b>Certo ou Errado</b> (+1, −1, em branco 0). Veja a <a href="#/banca">estratégia da banca</a>.</div>' : '') + '<div class="card"><b>🎯 Treino focado na aprovação</b><p class="small mut" style="margin:.2rem 0 .5rem">Mistura questões dos tópicos que mais pesam na prova e onde você mais erra.</p><a class="btn pri" href="#/quiz?foco=1&n=10">Treino focado (10)</a> <a class="btn" href="#/quiz?foco=1&n=20">20 questões</a></div><div class="card"><label for="pm">Matéria</label><select id="pm"><option value="">Todas</option>' + mats().map(function (m) { return '<option value="' + m.id + '">' + esc(m.nome) + '</option>'; }).join('') + '</select>' +
@@ -1007,8 +1111,8 @@
       var h = '<div class="row"><span class="small mut">Questão ' + (i + 1) + ' de ' + list.length + ' · ' + esc(m.nome) + ' · ' + esc(t.titulo) + '</span></div>' + bar(pct(i, list.length)) +
         '<div class="card"><p class="q-enun">' + esc(isCE() ? ceTexto(qu) : qu.q) + '</p><div id="opts">' + (isCE()
           ? '<button class="opt" data-c="C"><span class="l">C</span><span>Certo</span></button><button class="opt" data-c="E"><span class="l">E</span><span>Errado</span></button><button class="btn sm" data-c="B" style="margin-top:.4rem">Deixar em branco (0 ponto)</button>'
-          : qu.a.map(function (a, k) { return '<button class="opt" data-k="' + k + '"><span class="l">' + LET[k] + '</span><span>' + esc(a) + '</span></button>'; }).join('')) + '</div><div id="fb"></div></div>';
-      $app.innerHTML = h;
+          : qu.a.map(function (a, k) { return '<button class="opt" data-k="' + k + '"><span class="l">' + LET[k] + '</span><span>' + esc(a) + '</span></button>'; }).join('')) + '</div>' + rascunhoHtml(qu.id) + '<div id="fb"></div></div>';
+      $app.innerHTML = h; ligaRascunho($app);
       Array.prototype.forEach.call($app.querySelectorAll('.opt[data-k]'), function (b) { b.onclick = function () { resp(+b.getAttribute('data-k')); }; });
       Array.prototype.forEach.call($app.querySelectorAll('[data-c]'), function (b) { b.onclick = function () { respCE(b.getAttribute('data-c')); }; });
     }
@@ -1019,10 +1123,10 @@
       i++; lembra(); i--;
       Array.prototype.forEach.call($app.querySelectorAll('[data-c]'), function (b) { b.disabled = true; });
       var fb = '<div class="expl"><b>' + (branco ? 'Em branco: 0 ponto.' : ok ? '✔ Correto: +1 ponto.' : '✘ Errado: −1 ponto (anula um acerto).') + '</b><br>O item estava <b>' + (it.certo ? 'CERTO' : 'ERRADO') + '</b>. ' + esc(qu.e) + '</div>';
-      fb += blocoAlternativas(qu, null);
+      fb += blocoAlternativas(qu, null) + duvidaHtml(qu.id);
       if (!ok && !branco) fb += '<div class="small mut">Por que errou? <span class="row" style="display:inline-flex">' + [['nao_sabia', 'Não sabia'], ['confundi', 'Confundi'], ['desatencao', 'Desatenção']].map(function (x) { return '<button class="btn sm" data-mot="' + x[0] + '">' + x[1] + '</button>'; }).join('') + '</span></div>';
       fb += '<p><button class="btn pri" id="nx">' + (i + 1 < list.length ? 'Próximo →' : 'Ver resultado') + '</button></p>';
-      document.getElementById('fb').innerHTML = fb;
+      document.getElementById('fb').innerHTML = fb; ligaDuvidas(document.getElementById('fb'));
       Array.prototype.forEach.call($app.querySelectorAll('[data-mot]'), function (b) { b.onclick = function () { S.erros[qu.id].motivo = b.getAttribute('data-mot'); save(); Array.prototype.forEach.call($app.querySelectorAll('[data-mot]'), function (x) { x.classList.toggle('pri', x === b); }); }; });
       document.getElementById('nx').onclick = function () { i++; show(); };
     }
@@ -1034,10 +1138,10 @@
         var n = +b.getAttribute('data-k'); b.disabled = true; if (n === qu.g) b.classList.add('right'); else if (n === k) b.classList.add('wrong');
       });
       var fb = '<div class="expl"><b>' + (ok ? '✔ Correto!' : '✘ Gabarito: ' + LET[qu.g]) + '</b><br>' + esc(qu.e) + '</div>';
-      fb += blocoAlternativas(qu, k);
+      fb += blocoAlternativas(qu, k) + duvidaHtml(qu.id);
       if (!ok) fb += '<div class="small mut">Por que errou? <span class="row" style="display:inline-flex">' + [['nao_sabia', 'Não sabia'], ['confundi', 'Confundi'], ['desatencao', 'Desatenção']].map(function (x) { return '<button class="btn sm" data-mot="' + x[0] + '">' + x[1] + '</button>'; }).join('') + '</span></div>';
       fb += '<p><button class="btn pri" id="nx">' + (i + 1 < list.length ? 'Próxima →' : 'Ver resultado') + '</button></p>';
-      document.getElementById('fb').innerHTML = fb;
+      document.getElementById('fb').innerHTML = fb; ligaDuvidas(document.getElementById('fb'));
       Array.prototype.forEach.call($app.querySelectorAll('[data-mot]'), function (b) { b.onclick = function () { S.erros[qu.id].motivo = b.getAttribute('data-mot'); save(); Array.prototype.forEach.call($app.querySelectorAll('[data-mot]'), function (x) { x.classList.toggle('pri', x === b); }); }; });
       document.getElementById('nx').onclick = function () { i++; show(); };
     }
@@ -1096,10 +1200,10 @@
       h += '<div class="card"><div class="small mut">' + (isCE() ? 'Item ' : 'Questão ') + (s.i + 1) + ' de ' + s.ids.length + ' · ' + esc(m.nome) + '</div><p class="q-enun">' + esc(isCE() ? ceTexto(qu) : qu.q) + '</p>' +
         (isCE() ? ['C', 'E'].map(function (v) { return '<button class="opt ' + (s.resp[qu.id] === v ? 'sel' : '') + '" data-c="' + v + '"><span class="l">' + v + '</span><span>' + ceRot(v) + '</span></button>'; }).join('')
           : qu.a.map(function (a, k) { return '<button class="opt ' + (s.resp[qu.id] === k ? 'sel' : '') + '" data-k="' + k + '"><span class="l">' + LET[k] + '</span><span>' + esc(a) + '</span></button>'; }).join('')) +
-        '<div class="row"><button class="btn sm" id="clr">' + (isCE() ? 'Deixar em branco' : 'Limpar resposta') + '</button><button class="btn sm" id="mk">' + (s.marc[qu.id] ? '★ Desmarcar' : '☆ Marcar para revisar') + '</button></div></div>' +
+        '<div class="row"><button class="btn sm" id="clr">' + (isCE() ? 'Deixar em branco' : 'Limpar resposta') + '</button><button class="btn sm" id="mk">' + (s.marc[qu.id] ? '★ Desmarcar' : '☆ Marcar para revisar') + '</button></div>' + rascunhoHtml(qu.id) + '</div>' +
         '<div class="row"><button class="btn" id="pv" ' + (s.i === 0 ? 'disabled' : '') + '>← Anterior</button><span class="sp"></span><button class="btn" id="nx" ' + (s.i === s.ids.length - 1 ? 'disabled' : '') + '>Próxima →</button></div>' +
         '<p class="small mut"><b>Banca ' + esc(bancaAtual().nome) + ':</b> ' + bancaAtual().estrategia[0] + '</p>';
-      $app.innerHTML = h;
+      $app.innerHTML = h; ligaRascunho($app);
       Array.prototype.forEach.call($app.querySelectorAll('.opt[data-k]'), function (b) { b.onclick = function () { s.resp[qu.id] = +b.getAttribute('data-k'); saveSim(s); draw(); }; });
       Array.prototype.forEach.call($app.querySelectorAll('.opt[data-c]'), function (b) { b.onclick = function () { s.resp[qu.id] = b.getAttribute('data-c'); saveSim(s); draw(); }; });
       Array.prototype.forEach.call($app.querySelectorAll('[data-g]'), function (b) { b.onclick = function () { s.i = +b.getAttribute('data-g'); saveSim(s); draw(); }; });
@@ -1176,12 +1280,12 @@
     h += '<h2>Correção comentada</h2><p class="small mut">Toque em "Por que cada alternativa" para ver a explicação de todas as opções.</p>' + e.ids.map(function (id, n) {
       var q = qById(id); if (!q) return '';
       var r = e.resp[id], ok = e.ce ? ceAcertou(q, r) : r === q.g;
-      if (e.ce) { r = e.resp[id]; return '<div class="card"><div class="row"><b>' + (n + 1) + '.</b> <span class="pill ' + (r == null ? '' : ok ? 'ok' : 'bad') + '">' + (r == null ? 'em branco (0)' : ok ? 'acertou (+1)' : 'errou (−1)') + '</span><span class="sp"></span><span class="small mut">' + esc(mat(q.m).nome) + '</span></div><p>' + esc(ceTexto(q)) + '</p><p class="small">Sua resposta: <b>' + ceRot(r) + '</b> · Gabarito: <b>' + (ceItem(q).certo ? 'Certo' : 'Errado') + '</b></p><div class="expl small">' + esc(q.e) + '</div>' + (C.x && C.x[q.id] ? '<details class="det-alts"' + (ok ? '' : ' open') + '><summary>Por que cada alternativa</summary>' + blocoAlternativas(q, null) + '</details>' : '') + '</div>'; }
+      if (e.ce) { r = e.resp[id]; return '<div class="card"><div class="row"><b>' + (n + 1) + '.</b> <span class="pill ' + (r == null ? '' : ok ? 'ok' : 'bad') + '">' + (r == null ? 'em branco (0)' : ok ? 'acertou (+1)' : 'errou (−1)') + '</span><span class="sp"></span><span class="small mut">' + esc(mat(q.m).nome) + '</span></div><p>' + esc(ceTexto(q)) + '</p><p class="small">Sua resposta: <b>' + ceRot(r) + '</b> · Gabarito: <b>' + (ceItem(q).certo ? 'Certo' : 'Errado') + '</b></p><div class="expl small">' + esc(q.e) + '</div>' + (C.x && C.x[q.id] ? '<details class="det-alts"' + (ok ? '' : ' open') + '><summary>Por que cada alternativa</summary>' + blocoAlternativas(q, null) + '</details>' : '') + duvidaHtml(q.id) + '</div>'; }
       return '<div class="card"><div class="row"><b>' + (n + 1) + '.</b> <span class="pill ' + (ok ? 'ok' : 'bad') + '">' + (r == null ? 'em branco' : ok ? 'acertou' : 'errou') + '</span><span class="sp"></span><span class="small mut">' + esc(mat(q.m).nome) + '</span></div><p>' + esc(q.q) + '</p><p class="small">Sua resposta: ' + (r == null ? '--' : LET[r] + ') ' + esc(q.a[r])) + '<br>Gabarito: <b>' + LET[q.g] + ') ' + esc(q.a[q.g]) + '</b></p><div class="expl small">' + esc(q.e) + '</div>' +
-        (C.x && C.x[q.id] ? '<details class="det-alts"' + (ok ? '' : ' open') + '><summary>Por que cada alternativa</summary>' + blocoAlternativas(q, r) + '</details>' : '') + '</div>';
+        (C.x && C.x[q.id] ? '<details class="det-alts"' + (ok ? '' : ' open') + '><summary>Por que cada alternativa</summary>' + blocoAlternativas(q, r) + '</details>' : '') + duvidaHtml(q.id) + '</div>';
     }).join('');
     h += '<p><a class="btn pri" href="#/erros">Ver caderno de erros</a> <a class="btn" href="#/simulados">Novo simulado</a></p>';
-    $app.innerHTML = h; window.scrollTo(0, 0);
+    $app.innerHTML = h; window.scrollTo(0, 0); ligaDuvidas($app);
     var ag = document.getElementById('sr-again');
     if (ag) ag.onclick = function () { saveSim({ ids: e.ids.slice(), resp: {}, marc: {}, i: 0, ini: Date.now(), dec: 0, dur: e.dur, fim: null }); go('#/simulado'); };
   }
@@ -1346,7 +1450,7 @@
 
   /* ---------- Mais / Config ---------- */
   function vMais() {
-    $app.innerHTML = '<h1>Mais</h1><div class="card list">' + [['#/erros', '📓 Caderno de erros'], ['#/revisao', '🔁 Revisão espaçada'], ['#/cronograma', '📅 Cronograma'], ['#/resumo', '📚 Resumo do que estudei'], ['#/banca', '🎯 Estilo da banca e como pontuar'], ['#/concursos', '🗂️ Concursos por categoria'], ['#/edital', '📄 Edital e regras da prova'], ['#/conta', '👤 Minha conta e sair']].concat(mostraAreaDono() ? [['#/dono', '🛡️ Área do dono']] : []).concat([ ['#/config', '⚙️ Ajustes e backup']]).map(function (x) { return '<a class="item" href="' + x[0] + '">' + x[1] + '</a>'; }).join('') + '</div>';
+    $app.innerHTML = '<h1>Mais</h1><div class="card list">' + [['#/erros', '📓 Caderno de erros'], ['#/revisao', '🔁 Revisão espaçada'], ['#/cronograma', '📅 Cronograma'], ['#/resumo', '📚 Resumo do que estudei'], ['#/duvidas', '💬 Tire dúvidas'], ['#/banca', '🎯 Estilo da banca e como pontuar'], ['#/concursos', '🗂️ Concursos por categoria'], ['#/edital', '📄 Edital e regras da prova'], ['#/conta', '👤 Minha conta e sair']].concat(mostraAreaDono() ? [['#/dono', '🛡️ Área do dono']] : []).concat([ ['#/config', '⚙️ Ajustes e backup']]).map(function (x) { return '<a class="item" href="' + x[0] + '">' + x[1] + '</a>'; }).join('') + '</div>';
   }
   function vConfig() {
     $app.innerHTML = '<h1>Ajustes</h1><div class="card"><h3 style="margin-top:0">Meu cadastro</h3><p class="small mut" style="margin:0 0 .4rem">Conta: ' + esc(mostraLogin((usuarioAtual() || {}).login || '')) + ' · <a href="#/conta">Minha conta / sair</a></p><p class="small">' + esc(S.perfil.nome) + ' · ' + inscs().map(rotulo).map(esc).join(', ') + '</p><label for="nv">Estou estudando para</label><select id="nv">' + inscs().map(function (i, k) { return '<option value="' + k + '"' + (i.c === S.concurso && i.n === S.nivel ? ' selected' : '') + '>' + esc(rotulo(i)) + '</option>'; }).join('') + '</select><p class="small mut">Muda os tópicos, questões, simulado e apostilas. Seu progresso é mantido.</p><a class="btn sm" href="#/cadastro">✎ Editar cadastro / adicionar nível</a></div><div class="card"><h3 style="margin-top:0">Minha meta</h3><label for="mn">Meta de acertos na prova (%) - a nota mínima é 50%</label><input type="number" id="mn" min="50" max="100" value="' + metaNota() + '"><label for="mq">Questões por dia</label><input type="number" id="mq" min="5" max="200" value="' + (S.metaq || 30) + '"></div><div class="card"><label for="meta">Meta semanal (etapas concluídas por semana)</label><input type="number" id="meta" min="1" max="40" value="' + S.meta + '"></div>' +

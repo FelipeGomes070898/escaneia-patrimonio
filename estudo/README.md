@@ -98,3 +98,7 @@ Cada concurso usa o perfil da sua banca (`CONC.bancas` em `data/core.js`): **IBG
 - Os **simulados** usam o ritmo da banca (minutos por questão) e a correção cita a regra da banca; na IBADE o resultado avisa se alguma disciplina foi zerada.
 - Na **Cebraspe (PF)** as questões viram itens **Certo/Errado** no treino e no simulado, com pontuação **+1 / −1 / 0 (em branco)**, nota líquida e orientação de quando deixar em branco.
 - As regras das bancas vêm de editais lidos e de notícias de 30/10/2026; confirme sempre no edital do seu cargo. A estrutura de IPAM, SEMUSA, SESAU-RO e PF continua estimada.
+
+## Rascunho, calculadora e tira-dúvidas
+- Em cada questão (treino e simulado) há um **rascunho com calculadora** (`+ − * / ( ) %`), que fica salvo por questão e não some ao trocar de alternativa.
+- Em cada correção e na tela **Tire dúvidas** (Mais → Tire dúvidas) a pessoa escreve a pergunta: o site responde com um **glossário** (adjetivo, crase, porcentagem, conjuntos etc.) e com trechos das aulas. O site **não tem IA própria** (não há servidor); para uma explicação sob medida, os botões abrem o Claude ou o ChatGPT com a pergunta, a questão e as alternativas já preenchidas.
