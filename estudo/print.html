@@ -45,13 +45,15 @@
 <script src="data/edital-legislacao.js"></script>
 <script src="data/pf.js"></script>
 <script src="data/pf-questoes.js"></script>
+<script src="data/prf.js"></script>
+<script src="data/prf-questoes.js"></script>
 <script>
 (function () {
   var C = window.CONC, L = ['A', 'B', 'C', 'D', 'E'];
   var qs0 = new URLSearchParams(location.search), id = qs0.get('m') || 'all', nv = qs0.get('nv') || 'medio', cid = qs0.get('c') || '';
   var CC = C.concursos.filter(function (x) { return x.id === cid; })[0];
   var NOME = C.niveis.filter(function (n) { return n.id === nv; })[0].nome;
-  function vis(t) { if (t.nv.indexOf(nv) < 0) return false; return CC && CC.esfera === 'federal' ? (t.so ? t.so.indexOf(CC.id) >= 0 : t.pf === true) : !t.so; }
+  function vis(t) { if (t.nv.indexOf(nv) < 0) return false; var tr = CC && CC.trilhas; if (tr) return t.so ? t.so.some(function (x) { return tr.indexOf(x) >= 0; }) : t.pf === true; return !t.so; }
   function visQ(q) { var m = C.materias.filter(function (x) { return x.id === q.m; })[0]; return vis(m.topicos.filter(function (t) { return t.id === q.t; })[0]); }
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   var ms = C.materias.filter(function (m) { return (id === 'all' || m.id === id) && m.topicos.some(vis); });

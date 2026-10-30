@@ -28,15 +28,21 @@ const srv = http.createServer((req, res) => {
     console.log('ok', out, fs.statSync(out).size);
     await page.close();
   }
-  /* Polícia Federal (nível superior): apostilas próprias */
-  for (const id of ['portugues', 'logica', 'pf-const', 'pf-adm', 'pf-penal', 'pf-proc', 'pf-leis', 'pf-info', 'completa']) {
+  /* Trilhas por concurso: pf (policial), prf (policial + trânsito) e base (comum a vários concursos), nível superior */
+  const trilhas = [
+    ['pf', 'pf', ['portugues', 'logica', 'pf-const', 'pf-adm', 'pf-penal', 'pf-proc', 'pf-leis', 'pf-info', 'completa'], 'Polícia Federal e carreiras policiais'],
+    ['prf', 'prf', ['portugues', 'logica', 'pf-const', 'pf-adm', 'pf-penal', 'pf-proc', 'pf-leis', 'pf-info', 'prf-transito', 'completa'], 'PRF'],
+    ['base-medio', 'pmro', ['portugues', 'logica', 'pf-const', 'pf-adm', 'pf-info', 'completa'], 'Matérias comuns (nível médio)', 'medio'],
+    ['base-superior', 'receita', ['portugues', 'logica', 'pf-const', 'pf-adm', 'pf-info', 'completa'], 'Matérias comuns (nível superior)', 'superior']
+  ];
+  for (const [chave, cid, ids2, rotulo, nvt] of trilhas) for (const id of ids2) {
     const page = await browser.newPage();
-    await page.goto(`${base}/print.html?nv=superior&c=pf&m=${id === 'completa' ? 'all' : id}`);
+    await page.goto(`${base}/print.html?nv=${nvt || 'superior'}&c=${cid}&m=${id === 'completa' ? 'all' : id}`);
     const pronto = await page.waitForSelector('body[data-ready="1"]', { timeout: 5000 }).catch(() => null);
     if (!pronto) { await page.close(); continue; }
-    const out = path.join(raiz, 'pdf', `apostila-pf-${id}.pdf`);
+    const out = path.join(raiz, 'pdf', `apostila-${chave}-${id}.pdf`);
     await page.pdf({ path: out, format: 'A4', margin: { top: '16mm', bottom: '16mm', left: '16mm', right: '16mm' }, printBackground: true, displayHeaderFooter: true,
-      headerTemplate: '<span></span>', footerTemplate: '<div style="font-size:8px;width:100%;text-align:center;color:#666">Rota do Concurso · Polícia Federal · página <span class="pageNumber"></span> de <span class="totalPages"></span></div>' });
+      headerTemplate: '<span></span>', footerTemplate: `<div style="font-size:8px;width:100%;text-align:center;color:#666">Rota do Concurso · ${rotulo} · página <span class="pageNumber"></span> de <span class="totalPages"></span></div>` });
     console.log('ok', out, fs.statSync(out).size);
     await page.close();
   }
