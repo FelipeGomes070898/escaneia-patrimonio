@@ -103,11 +103,13 @@ Cada concurso usa o perfil da sua banca (`CONC.bancas` em `data/core.js`): **IBG
 - Em cada questão (treino e simulado) há um **rascunho com calculadora** (`+ − * / ( ) %`), que fica salvo por questão e não some ao trocar de alternativa.
 - Em cada correção e na tela **Tire dúvidas** (Mais → Tire dúvidas) a pessoa escreve a pergunta: o site responde com um **glossário** (adjetivo, crase, porcentagem, conjuntos etc.) e com trechos das aulas. O site **não tem IA própria** (não há servidor); para uma explicação sob medida, os botões abrem o Claude ou o ChatGPT com a pergunta, a questão e as alternativas já preenchidas.
 
-## Mais concursos (atualizado em 30/10/2026)
-- **Federais previstos:** PRF (edital ainda não publicado; 511 a 533 vagas pedidas), Receita Federal (146 vagas autorizadas), Banco Central (170 vagas), INSS, CGU, TCU e IBGE, além da PF.
-- **Estaduais (RO):** PC-RO, PM-RO/Bombeiros (processo seletivo voluntário, inscrições até 17/11), SEFIN-RO e SESAU-RO.
-- **Municipais:** SEMED, SEMUSA e IPAM (Porto Velho), Guarda Municipal de Porto Velho, Prefeitura de Vilhena (Agente de Trânsito) e Câmara de Candeias do Jamari.
-- Cada concurso mostra a **situação do edital** (inscrições abertas, edital publicado, previsto, em andamento) e há filtros por categoria, situação, banca e cidade.
-- **Trilhas por concurso:** `policial` (PF, PRF, PC-RO, Guarda), `transito` (PRF, Vilhena: Código de Trânsito) e `base` (Português, Lógica, Constitucional, Administrativo e Informática, para os demais). Os Específicos de cada cargo (tributário, previdenciário etc.) ainda **não** estão no site.
+## Concursos previstos para sair (atualizado em 30/10/2026)
+- A tela **Concursos por categoria** abre mostrando os **previstos para sair** (ainda sem edital); para ver também os com edital publicado ou inscrições abertas (SEMED, SEMUSA, IPAM), toque em *Limpar filtros*.
+- **Federais previstos:** PF, PRF (511 a 533 vagas pedidas), Receita Federal (146 autorizadas), Banco Central (170), INSS, CGU, TCU, IBGE, ABIN (301 vagas pedidas), Banco do Nordeste (2027) e CNU 3 (2027).
+- **Estaduais previstos (RO):** SESAU-RO (banca IDECAN), SEFIN-RO, MP-RO, TJ-RO, DPE-RO e DETRAN-RO (fontes divergem).
+- **Municipais previstos:** Prefeitura de Vilhena (Agente de Trânsito, IBGP). Poucos municípios têm previsão confirmada: avise quais cidades quer acompanhar.
+- Concursos que já aconteceram (PC-RO, Guarda Municipal de Porto Velho, Câmara de Candeias do Jamari, processo voluntário da PM-RO) foram retirados da lista.
+- Cada concurso mostra a **situação do edital** e há filtros por categoria, situação, banca e cidade.
+- **Trilhas:** `policial` (PF, PRF), `transito` (PRF, Vilhena, DETRAN-RO) e `base` (Português, Lógica, Constitucional, Administrativo e Informática, para os demais). Os Específicos de cada cargo ainda **não** estão no site.
 - Quando a banca ainda não foi definida, o site treina no modelo provável (ex.: Cebraspe para PRF) e avisa.
 - Tudo vem de notícias de 30/10/2026; confirme sempre no Diário Oficial e no site da banca.

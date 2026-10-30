@@ -613,7 +613,7 @@
   }
 
   function vCadastro() {
-    var edit = !!S.perfil;
+    var edit = !!S.perfil; FILT = { esfera: '', fase: '', banca: '', cidade: '' };
     if (!edit) { document.getElementById('sidenav').innerHTML = ''; document.getElementById('bottomnav').innerHTML = ''; }
     var marc = edit ? inscs() : (S.nivel ? [{ c: S.concurso || (C.concursos.filter(function (x) { return x.niveis.indexOf(S.nivel) >= 0; })[0] || C.concursos[0]).id, n: S.nivel }] : []);
     function tem(c, n) { return marc.some(function (i) { return i.c === c && i.n === n; }); }
@@ -1408,8 +1408,10 @@
   }
 
   /* ---------- Concursos por categoria (municipal, estadual, federal) ---------- */
+  var filtInicial = false;
   function vConcursos() {
-    var h = '<h1>Concursos por categoria</h1><p class="mut">Escolha o concurso que você vai estudar. Os dados vêm de notícias e dos editais; <b>confirme sempre no edital oficial da banca</b>. A data de atualização é 30/10/2026.</p>' + barraFiltroHtml();
+    if (!filtInicial) { filtInicial = true; FILT = { esfera: '', fase: 'previsto', banca: '', cidade: '' }; }
+    var h = '<h1>Concursos por categoria</h1><p class="mut">Veja primeiro os concursos <b>previstos para sair</b> (ainda sem edital). Os dados vêm de notícias de 30/10/2026 e dos editais; <b>confirme sempre no edital oficial da banca</b>.' + (FILT.fase === 'previsto' ? ' Para ver também os que já têm edital publicado ou inscrições abertas (SEMED, SEMUSA, IPAM), toque em <b>Limpar filtros</b>.' : '') + '</p>' + barraFiltroHtml();
     C.esferas.forEach(function (es) {
       var lista = C.concursos.filter(function (cc) { return cc.esfera === es.id && casa(cc, FILT); }).sort(function (a, b) { return C.fases.map(function (x) { return x.id; }).indexOf(a.fase) - C.fases.map(function (x) { return x.id; }).indexOf(b.fase); });
       if (!lista.length) return;
@@ -1448,7 +1450,7 @@
       '<tr><th>Desempate</th><td>1º idoso (60+); 2º Específicos; 3º Português; 4º Legislação; 5º Raciocínio Lógico; 6º Gerais; 7º jurado; 8º idade maior (item 10.4)</td></tr></table></div>' +
       '<div class="card"><h3 style="margin-top:0">Regras do dia da prova (itens 9.3 e 9.2)</h3><ul><li>Caneta esferográfica <b>azul ou preta</b>, de corpo transparente.</li><li><b>Assinar</b> a Folha de Respostas (igual ao documento). Sem assinatura = eliminação.</li><li>Marque <b>uma</b> alternativa por questão; rasuras/emendas ou duas marcações anulam a questão.</li><li>Não amasse nem dobre a folha; não há substituição por erro do candidato.</li><li>Só pode sair definitivamente entregando a Folha de Respostas.</li><li>Não encontrei no corpo do edital desconto por erro: <b>confirmar no Anexo III</b>.</li></ul></div>' +
       '<div class="card"><h3 style="margin-top:0">Recursos (item 11)</h3><p>Fundamentado, sem identificação, até 3.000 caracteres, citando referência completa (capítulo e página). Questão anulada: ponto para todos.</p></div>' +
-      '<div class="card"><h3 style="margin-top:0">Outros concursos</h3><p class="small mut">Federais (PF, PRF, Receita, Banco Central, INSS, CGU, TCU, IBGE), estaduais (SESAU-RO, PC-RO, PM-RO, SEFIN-RO) e municipais (SEMUSA, IPAM, Guarda de Porto Velho, Vilhena, Candeias do Jamari) estão em <a href="#/concursos">Concursos por categoria</a>, com a situação de cada edital e o filtro por banca e cidade.</p><ul><li><b>PRF:</b> edital ainda não publicado; pedido de cerca de 511 a 533 vagas.</li><li><b>SEMUSA (IBGP)</b>: edital nº 25/2026, 2.248 vagas, inscrições até 11/11, prova prevista para 13/12/2026.</li><li><b>IPAM (IBADE)</b>: edital publicado, ~70 vagas, inscrições de 03/11 a 07/12/2026, provas previstas em 21 e 28/02/2027.</li><li><b>SESAU-RO (IDECAN)</b>: banca definida, edital ainda não confirmado.</li></ul></div>';
+      '<div class="card"><h3 style="margin-top:0">Outros concursos</h3><p class="small mut">Previstos federais (PF, PRF, Receita, Banco Central, INSS, CGU, TCU, IBGE, ABIN, Banco do Nordeste, CNU 3), estaduais (SESAU-RO, SEFIN-RO, MP-RO, TJ-RO, DPE-RO, DETRAN-RO) e municipais (Vilhena; e SEMUSA e IPAM, já com edital) estão em <a href="#/concursos">Concursos por categoria</a>, com a situação de cada edital e o filtro por banca e cidade.</p><ul><li><b>PRF:</b> edital ainda não publicado; pedido de cerca de 511 a 533 vagas.</li><li><b>SEMUSA (IBGP)</b>: edital nº 25/2026, 2.248 vagas, inscrições até 11/11, prova prevista para 13/12/2026.</li><li><b>IPAM (IBADE)</b>: edital publicado, ~70 vagas, inscrições de 03/11 a 07/12/2026, provas previstas em 21 e 28/02/2027.</li><li><b>SESAU-RO (IDECAN)</b>: banca definida, edital ainda não confirmado.</li></ul></div>';
   }
 
   /* ---------- Mais / Config ---------- */

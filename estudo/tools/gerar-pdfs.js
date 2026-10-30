@@ -32,7 +32,7 @@ const srv = http.createServer((req, res) => {
   const trilhas = [
     ['pf', 'pf', ['portugues', 'logica', 'pf-const', 'pf-adm', 'pf-penal', 'pf-proc', 'pf-leis', 'pf-info', 'completa'], 'Polícia Federal e carreiras policiais'],
     ['prf', 'prf', ['portugues', 'logica', 'pf-const', 'pf-adm', 'pf-penal', 'pf-proc', 'pf-leis', 'pf-info', 'prf-transito', 'completa'], 'PRF'],
-    ['base-medio', 'pmro', ['portugues', 'logica', 'pf-const', 'pf-adm', 'pf-info', 'completa'], 'Matérias comuns (nível médio)', 'medio'],
+    ['base-medio', 'inss', ['portugues', 'logica', 'pf-const', 'pf-adm', 'pf-info', 'completa'], 'Matérias comuns (nível médio)', 'medio'],
     ['base-superior', 'receita', ['portugues', 'logica', 'pf-const', 'pf-adm', 'pf-info', 'completa'], 'Matérias comuns (nível superior)', 'superior']
   ];
   for (const [chave, cid, ids2, rotulo, nvt] of trilhas) for (const id of ids2) {
