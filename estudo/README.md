@@ -58,7 +58,7 @@ Depois do cadastro tudo gira em torno de passar no nível escolhido:
 | Painel | contagem regressiva das provas, rotina do dia, próxima aula, progresso por matéria |
 | Trilha | 5 matérias, de 17 a 29 tópicos conforme o nível, cada um em 3 níveis (contexto, básico, aprofundado) |
 | Aula | texto, links para **videoaulas no YouTube** e **PDFs resumidos no Google** (buscas prontas), seus próprios links, apostila em PDF, teste rápido, anotação de 3 linhas, conclusão por volta |
-| Questões | 176 questões originais; ao responder, o site explica **cada alternativa**: por que a sua estava errada, por que a certa está certa e por que as outras não servem |
+| Questões | 230 questões originais; ao responder, o site explica **cada alternativa**: por que a sua estava errada, por que a certa está certa e por que as outras não servem |
 | Simulados | 50 questões / 3 h na distribuição da prova (10/10/10/15/5), ou mini de 20; correção por matéria e tópico com comentário de cada alternativa. O histórico guarda cada simulado: dá para **abrir de novo a correção** ou **refazer o mesmo** |
 | Caderno de erros | entra sozinho ao errar; motivo (não sabia, confundi, desatenção) e a regra correta |
 | Revisão | agenda automática em 1, 7 e 21 dias após concluir uma etapa |
@@ -85,3 +85,8 @@ Tudo está em `data/*.js` (o campo `nv` de cada tópico define os níveis; veja 
 
 ## Contador de cadastros do site
 A área do dono mostra **quantas pessoas se cadastraram no site inteiro**. É um contador externo gratuito (abacus.jasoncameron.dev): cada conta soma 1 uma única vez (contas antigas somam na próxima entrada). É aproximado, não mostra quem são e depende desse serviço estar no ar; sem internet mostra "indisponível agora".
+
+## Concursos por categoria e Polícia Federal
+- A tela **Concursos** (Mais → Concursos por categoria) lista os concursos em **Municipal** (SEMED, SEMUSA, IPAM), **Estadual** (SESAU-RO) e **Federal** (Polícia Federal), com banca, situação do edital, data da prova e botão para estudar cada nível. O cadastro também agrupa por categoria.
+- **Polícia Federal (Cebraspe, nível superior)**: trilha própria (Português e Raciocínio Lógico comuns, mais Direito Constitucional, Administrativo, Penal, Processual Penal, Legislação Especial e Informática), 40 questões comentadas e apostilas `pdf/apostila-pf-*.pdf`. **A estrutura é estimada**: não saiu edital novo em fonte oficial (último: 2025). Conferir no edital.
+- **SEMED, nível médio**: a retificação nº 27/2026 (09/10/2026) trouxe o Anexo IV de **Legislação** (Lei Orgânica, Lei 385/2010, Leis 360/2009 e 391/2010, Lei Brasileira de Inclusão, CF arts. 5º a 13 e 29 a 39, Lei 14.133/2021 e Lei 12.527/2011). Esses tópicos aparecem marcados como **confirmados no edital**; Português, Lógica, Gerais e Específicos continuam prováveis (o texto do Anexo IV não veio nos PDFs acessíveis).

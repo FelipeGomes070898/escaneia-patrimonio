@@ -16,14 +16,25 @@ var NV_FUND = ['portugues/interpretacao', 'portugues/classes', 'portugues/concor
 /* Concursos de Porto Velho/RO 2026 (atualizado em 29/10/2026 a partir de sites de notícias e preparatórios; confirmar sempre no edital oficial da banca).
    niveis = níveis de escolaridade oferecidos; prova = data/hora (null se ainda sem data oficial). */
 CONC.concursos = [
-  { id: 'semed', nome: 'SEMED', completo: 'Prefeitura de Porto Velho - Educação (SEMED)', banca: 'IBGP', niveis: ['medio', 'superior'], prova: '2026-12-06T09:15:00-04:00',
+  { id: 'semed', esfera: 'municipal', nome: 'SEMED', completo: 'Prefeitura de Porto Velho - Educação (SEMED)', banca: 'IBGP', niveis: ['medio', 'superior'], prova: '2026-12-06T09:15:00-04:00',
     status: 'Edital nº 24/2026 publicado em 29/09/2026: 430 vagas (165 imediatas + 265 cadastro de reserva), médio e superior. Inscrições de 13/10 a 11/11/2026 (pagamento até 12/11), taxa R$ 90 (médio) e R$ 130 (superior). Prova objetiva em 06/12/2026 (alguns sites chamam de data provável).', busca: 'https://www.ibgpconcursos.com.br' },
-  { id: 'semusa', nome: 'SEMUSA', completo: 'Prefeitura de Porto Velho - Saúde (SEMUSA)', banca: 'IBGP', niveis: ['fundamental', 'medio', 'superior'], prova: '2026-12-13T14:45:00-04:00',
+  { id: 'semusa', esfera: 'municipal', nome: 'SEMUSA', completo: 'Prefeitura de Porto Velho - Saúde (SEMUSA)', banca: 'IBGP', niveis: ['fundamental', 'medio', 'superior'], prova: '2026-12-13T14:45:00-04:00',
     status: 'Edital nº 25/2026 publicado: 2.248 vagas (641 imediatas + 1.607 cadastro de reserva), fundamental, médio/técnico e superior. Inscrições de 13/10 a 11/11/2026 (pagamento até 12/11), taxas R$ 90 (fundamental), R$ 105 (médio/técnico) e R$ 140 (superior). Prova objetiva prevista para 13/12/2026; horário por cargo A CONFIRMAR NO EDITAL. Prova de títulos para quem for convocado.', busca: 'https://www.ibgpconcursos.com.br' },
-  { id: 'ipam', nome: 'IPAM', completo: 'Instituto de Previdência dos Servidores de Porto Velho (IPAM)', banca: 'IBADE', niveis: ['medio', 'superior'], prova: '2027-02-21',
+  { id: 'ipam', esfera: 'municipal', nome: 'IPAM', completo: 'Instituto de Previdência dos Servidores de Porto Velho (IPAM)', banca: 'IBADE', niveis: ['medio', 'superior'], prova: '2027-02-21',
     status: 'Edital publicado (banca IBADE): cerca de 70 a 71 vagas imediatas mais cadastro de reserva, médio e superior, salários até cerca de R$ 5 mil. Inscrições de 03/11 (10h) a 07/12/2026 (23h59) no site do IBADE; taxas R$ 105 (médio) e R$ 140 (superior). Provas previstas para 21 e 28/02/2027 (horário A CONFIRMAR NO EDITAL).', busca: 'https://www.google.com/search?q=concurso+IPAM+Porto+Velho+2026+IBADE+edital' },
-  { id: 'sesau', nome: 'SESAU-RO', completo: 'Secretaria de Estado da Saúde de Rondônia (SESAU)', banca: 'IDECAN', niveis: ['medio', 'superior'], prova: null,
-    status: 'Banca IDECAN definida (Diário Oficial de 20/08/2026). Projeto prevê cerca de 2.395 vagas (médio, técnico e superior), mas o edital ainda não foi confirmado como publicado até 29/10/2026. Níveis e datas A CONFIRMAR.', busca: 'https://www.google.com/search?q=concurso+SESAU+RO+2026+IDECAN+edital' }
+  { id: 'sesau', esfera: 'estadual', nome: 'SESAU-RO', completo: 'Secretaria de Estado da Saúde de Rondônia (SESAU)', banca: 'IDECAN', niveis: ['medio', 'superior'], prova: null,
+    status: 'Banca IDECAN definida (Diário Oficial de 20/08/2026). Projeto prevê cerca de 2.395 vagas (médio, técnico e superior), mas o edital ainda não foi confirmado como publicado até 29/10/2026. Níveis e datas A CONFIRMAR.', busca: 'https://www.google.com/search?q=concurso+SESAU+RO+2026+IDECAN+edital' },
+  { id: 'pf', esfera: 'federal', nome: 'Polícia Federal', completo: 'Polícia Federal - cargos policiais (Agente, Escrivão e Papiloscopista)', banca: 'Cebraspe', niveis: ['superior'], prova: null,
+    status: 'Último concurso: edital de 2025 (1.000 vagas: 630 agente, 160 escrivão, 21 papiloscopista, 120 delegado e 69 perito), banca Cebraspe, inscrições de 26/05 a 17/06/2025, taxa de R$ 180 para agente, escrivão e papiloscopista, provas em 27/07/2025. Novo edital: ainda não confirmado em fonte oficial (sites falam em cerca de 1.500 vagas, sem confirmação). Conteúdo e nº de itens A CONFIRMAR NO EDITAL.', busca: 'https://www.cebraspe.org.br',
+    /* estrutura ESTIMADA (não li edital): número de questões por matéria */
+    dist: { q: { portugues: 15, logica: 10, 'pf-info': 10, 'pf-const': 10, 'pf-adm': 10, 'pf-penal': 15, 'pf-proc': 10, 'pf-leis': 10 }, confirmada: false } }
+];
+
+/* Categorias (esferas) para organizar a lista de concursos */
+CONC.esferas = [
+  { id: 'municipal', nome: 'Municipal', icone: '🏙️' },
+  { id: 'estadual', nome: 'Estadual', icone: '🏛️' },
+  { id: 'federal', nome: 'Federal', icone: '🇧🇷' }
 ];
 
 /* M: registra uma matéria com seus tópicos */
