@@ -30,8 +30,8 @@
   function mat(id) { return C.materias.filter(function (m) { return m.id === id; })[0]; }
   function topico(m, t) { var mm = mat(m); return mm && mm.topicos.filter(function (x) { return x.id === t; })[0]; }
   function nvInfo() { return C.niveis.filter(function (n) { return n.id === S.nivel; })[0]; }
-  /* Tópico visível: nível certo e trilha certa. Concurso federal (PF) só vê tópicos próprios (so) e os comuns marcados pf; os demais não veem tópicos exclusivos (so). */
-  function tvis(t) { var cc = concInfo(S.concurso); if (t.nv.indexOf(S.nivel) < 0) return false; return cc.esfera === 'federal' ? (t.so ? t.so.indexOf(cc.id) >= 0 : t.pf === true) : !t.so; }
+  /* Tópico visível: nível certo e trilha certa. Concursos com trilhas (policial, base, transito) veem os tópicos dessas trilhas (so) e os comuns marcados pf; os demais não veem tópicos exclusivos (so). */
+  function tvis(t) { var cc = concInfo(S.concurso); if (t.nv.indexOf(S.nivel) < 0) return false; var tr = cc.trilhas; if (tr) return t.so ? t.so.some(function (x) { return tr.indexOf(x) >= 0; }) : t.pf === true; return !t.so; }
   function distAtual() { return concInfo(S.concurso).dist || C.dist[S.nivel]; }
   function topsOf(m) { return m.topicos.filter(tvis); }
   function mats() { return C.materias.filter(function (m) { return topsOf(m).length; }); }
@@ -565,7 +565,7 @@
   function setAlvo(c, n) { S.concurso = c; S.nivel = n; }
   function estrConf() { return S.concurso === 'semed' && S.nivel === 'medio'; }
   /* ---------- Estilo da banca ---------- */
-  function bancaDe(cid) { return C.bancas[concInfo(cid).banca] || C.bancas.IBGP; }
+  function bancaDe(cid) { var cc = concInfo(cid); return C.bancas[cc.banca === 'A definir' && cc.modelo ? cc.modelo : cc.banca] || C.bancas['A definir']; }
   function bancaAtual() { return bancaDe(S.concurso); }
   function isCE() { return bancaAtual().formato === 'ce'; }
   function hsh(t) { var h = 0; for (var i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) | 0; return Math.abs(h); }
@@ -578,7 +578,7 @@
   function ceTexto(q) { return 'Julgue o item. ' + q.q + ' Afirmação: a resposta correta é "' + q.a[ceItem(q).alt] + '".'; }
   function ceAcertou(q, r) { return r != null && (r === 'C') === ceItem(q).certo; }
   function ceRot(r) { return r === 'C' ? 'Certo' : r === 'E' ? 'Errado' : '--'; }
-  function pdfKey() { return concInfo(S.concurso).esfera === 'federal' ? 'pf' : S.nivel; }
+  function pdfKey() { var tr = concInfo(S.concurso).trilhas; return tr ? (tr.indexOf('policial') >= 0 ? (tr.indexOf('transito') >= 0 ? 'prf' : 'pf') : 'base-' + S.nivel) : S.nivel; }
   function concDesc(c) { return concInfo(c).esfera === 'federal' ? 'Concurso federal' : concInfo(c).esfera === 'estadual' ? 'Concurso estadual' : 'Concurso municipal'; } /* só esta combinação tem edital lido */
   function primeiroNome() { return S.perfil ? String(S.perfil.nome).split(' ')[0] : ''; }
   function marcaSessao() { nivelConfirmado = true; try { sessionStorage.setItem('estudo.nvok', '1'); } catch (e) { } }
@@ -623,7 +623,7 @@
       '<h1>' + (edit ? 'Meu cadastro' : 'Cadastre-se para entrar') + '</h1>' +
       '<p class="mut">' + (edit ? 'Atualize seu nome ou suas inscrições.' : 'Informe seu nome, o(s) concurso(s) em que você se inscreveu e o nível que pagou em cada um. Tudo no site é montado para você passar nessa prova: meta de nota, missão diária e foco nos seus pontos fracos.') + '</p>' +
       '<form id="cad" class="card" novalidate><label for="cd-nome">Seu nome</label><input type="text" id="cd-nome" maxlength="60" autocomplete="name" placeholder="Ex.: Maria Silva" value="' + esc(nome) + '">' +
-      '<fieldset style="border:0;padding:0;margin:.8rem 0 0"><legend style="font-weight:600;margin-bottom:.3rem">Em qual concurso você se inscreveu?</legend><p class="small mut" style="margin:0 0 .4rem">Use os menus para achar o concurso: categoria, banca realizadora e cidade. Depois marque o concurso e o nível da prova que você pagou (pode marcar mais de um).</p><div id="fbox"></div>' +
+      '<fieldset style="border:0;padding:0;margin:.8rem 0 0"><legend style="font-weight:600;margin-bottom:.3rem">Em qual concurso você se inscreveu (ou vai se inscrever)?</legend><p class="small mut" style="margin:0 0 .4rem">Use os menus para achar o concurso: categoria, banca realizadora e cidade. Depois marque o concurso e o nível da prova que você pagou (pode marcar mais de um).</p><div id="fbox"></div>' +
       C.esferas.map(function (es) { return '<h3 data-es="' + es.id + '" style="margin:.9rem 0 .1rem">' + es.icone + ' ' + es.nome + '</h3>' + C.concursos.filter(function (cc) { return cc.esfera === es.id; }).map(function (cc) {
         return '<div class="conc" data-cc="' + cc.id + '" data-es="' + cc.esfera + '" style="border:1px solid var(--line);border-radius:12px;padding:.6rem .7rem;margin:.5rem 0"><label class="chk" style="font-weight:400;margin:0"><input type="checkbox" name="cc" value="' + cc.id + '"' + (temC(cc.id) ? ' checked' : '') + '><span><b>' + esc(cc.nome) + '</b> · banca ' + esc(cc.banca) + '<br><span class="small mut">' + esc(cc.completo) + '</span><br><span class="small mut">Prova: ' + esc(provaTxt(cc)) + '. ' + esc(cc.status) + '</span></span></label>' +
           '<div class="nvs" style="margin:.4rem 0 0 2rem"' + (temC(cc.id) ? '' : ' hidden') + '><div class="small" style="font-weight:600">Nível que você pagou:</div>' +
@@ -1354,21 +1354,23 @@
 
   /* ---------- Edital ---------- */
   /* ---------- Filtro em menus suspensos: categoria, banca e cidade (em cascata) ---------- */
-  var FILT = { esfera: '', banca: '', cidade: '' };
-  function casa(cc, f) { return (!f.esfera || cc.esfera === f.esfera) && (!f.banca || cc.banca === f.banca) && (!f.cidade || cc.cidade === f.cidade); }
+  var FILT = { esfera: '', fase: '', banca: '', cidade: '' };
+  function casa(cc, f) { return (!f.esfera || cc.esfera === f.esfera) && (!f.fase || cc.fase === f.fase) && (!f.banca || cc.banca === f.banca) && (!f.cidade || cc.cidade === f.cidade); }
   function opcoesFiltro(campo) {
-    var f = { esfera: FILT.esfera, banca: FILT.banca, cidade: FILT.cidade }; f[campo] = '';
+    var f = { esfera: FILT.esfera, fase: FILT.fase, banca: FILT.banca, cidade: FILT.cidade }; f[campo] = '';
     var v = []; C.concursos.forEach(function (cc) { if (casa(cc, f) && v.indexOf(cc[campo]) < 0) v.push(cc[campo]); });
+    if (campo === 'fase') return C.fases.map(function (x) { return x.id; }).filter(function (x) { return v.indexOf(x) >= 0; });
     return v.sort(function (a, b) { return String(a).localeCompare(String(b), 'pt-BR'); });
   }
+  function rotFase(id) { var f = C.fases.filter(function (x) { return x.id === id; })[0]; return f ? f.nome : id; }
   function rotEsfera(id) { var e = C.esferas.filter(function (x) { return x.id === id; })[0]; return e ? e.icone + ' ' + e.nome : id; }
   function barraFiltroHtml() {
     function sel(campo, titulo, rot) {
       return '<label class="small" style="display:block;font-weight:600;margin:.3rem 0 .15rem" for="f-' + campo + '">' + titulo + '</label><select id="f-' + campo + '" data-f="' + campo + '"><option value="">Todas</option>' +
         opcoesFiltro(campo).map(function (o) { return '<option value="' + esc(o) + '"' + (FILT[campo] === o ? ' selected' : '') + '>' + esc(rot ? rot(o) : o) + '</option>'; }).join('') + '</select>';
     }
-    return '<div class="card" id="fbar"><b>Filtrar concursos</b><p class="small mut" style="margin:.2rem 0">Escolha a categoria, a banca realizadora e a cidade. As opções de cada menu se ajustam às outras escolhas.</p>' +
-      sel('esfera', 'Categoria', rotEsfera) + sel('banca', 'Banca realizadora') + sel('cidade', 'Cidade / abrangência') +
+    return '<div class="card" id="fbar"><b>Filtrar concursos</b><p class="small mut" style="margin:.2rem 0">Escolha a categoria, a situação do edital, a banca realizadora e a cidade. As opções de cada menu se ajustam às outras escolhas.</p>' +
+      sel('esfera', 'Categoria', rotEsfera) + sel('fase', 'Situação do edital', rotFase) + sel('banca', 'Banca realizadora') + sel('cidade', 'Cidade / abrangência') +
       '<div class="row" style="margin-top:.5rem"><button type="button" class="btn sm" id="f-limpa">Limpar filtros</button><span class="sp"></span><span class="small mut" id="f-cont"></span></div></div>';
   }
   function ligaFiltro(onchange) {
@@ -1376,11 +1378,11 @@
     Array.prototype.forEach.call(bar.querySelectorAll('select'), function (sl) {
       sl.onchange = function () {
         FILT[sl.getAttribute('data-f')] = sl.value;
-        ['esfera', 'banca', 'cidade'].forEach(function (c) { if (FILT[c] && opcoesFiltro(c).indexOf(FILT[c]) < 0) FILT[c] = ''; });
+        ['esfera', 'fase', 'banca', 'cidade'].forEach(function (c) { if (FILT[c] && opcoesFiltro(c).indexOf(FILT[c]) < 0) FILT[c] = ''; });
         onchange();
       };
     });
-    document.getElementById('f-limpa').onclick = function () { FILT = { esfera: '', banca: '', cidade: '' }; onchange(); };
+    document.getElementById('f-limpa').onclick = function () { FILT = { esfera: '', fase: '', banca: '', cidade: '' }; onchange(); };
     var n = C.concursos.filter(function (cc) { return casa(cc, FILT); }).length;
     document.getElementById('f-cont').textContent = n + ' concurso(s)';
   }
@@ -1393,6 +1395,7 @@
     var b = bancaAtual(), cc = concInfo(S.concurso), D = distAtual(), dq = D.q, tot = Object.keys(dq).reduce(function (a, k) { return a + dq[k]; }, 0), mins = Math.round(tot * b.minQ);
     var g = acc(function () { return true; });
     var h = '<h1>Estilo da banca ' + esc(b.nome) + '</h1><p class="mut">O estudo, os simulados e a correção do site seguem a forma como esta banca monta e pontua a prova de <b>' + esc(cc.nome) + '</b>. As regras vêm de editais lidos e de notícias: <b>confirme no edital do seu cargo</b>.</p>';
+    if (cc.banca === 'A definir') h += '<div class="aviso"><b>Banca ainda não definida</b> para este concurso.' + (cc.modelo ? ' O treino usa o modelo <b>' + esc(cc.modelo) + '</b> (a banca provável ou usual); quando o edital sair, confira o formato real.' : ' O treino usa um modelo genérico até o edital sair.') + '</div>';
     h += '<div class="card"><h3 style="margin-top:0">Formato e pontuação</h3><p>' + b.tipo + '</p><p class="small">' + b.nota + '</p><p class="small mut">Simulado do site para esta inscrição: ' + tot + ' ' + (b.formato === 'ce' ? 'itens Certo/Errado' : 'questões de múltipla escolha') + ' em cerca de ' + Math.floor(mins / 60) + ' h ' + pad(mins % 60) + ' min (' + String(b.minQ).replace('.', ',') + ' min por ' + (b.formato === 'ce' ? 'item' : 'questão') + ')' + (estrConf() ? '' : '. A distribuição é <b>estimada</b>.') + '</p></div>';
     h += '<div class="card"><h3 style="margin-top:0">Como a banca costuma cobrar</h3><ul>' + b.estilo.map(function (x) { return '<li>' + x + '</li>'; }).join('') + '</ul></div>';
     h += '<div class="card" style="border-left:6px solid var(--pri)"><h3 style="margin-top:0">Estratégia para acertar o máximo</h3><ul>' + b.estrategia.map(function (x) { return '<li>' + x + '</li>'; }).join('') + '</ul></div>';
@@ -1408,12 +1411,12 @@
   function vConcursos() {
     var h = '<h1>Concursos por categoria</h1><p class="mut">Escolha o concurso que você vai estudar. Os dados vêm de notícias e dos editais; <b>confirme sempre no edital oficial da banca</b>. A data de atualização é 30/10/2026.</p>' + barraFiltroHtml();
     C.esferas.forEach(function (es) {
-      var lista = C.concursos.filter(function (cc) { return cc.esfera === es.id && casa(cc, FILT); });
+      var lista = C.concursos.filter(function (cc) { return cc.esfera === es.id && casa(cc, FILT); }).sort(function (a, b) { return C.fases.map(function (x) { return x.id; }).indexOf(a.fase) - C.fases.map(function (x) { return x.id; }).indexOf(b.fase); });
       if (!lista.length) return;
       h += '<h2>' + es.icone + ' ' + es.nome + '</h2>';
       lista.forEach(function (cc) {
-        var meus = inscs().filter(function (i) { return i.c === cc.id; }), d = cc.prova && cc.prova.length > 10 ? diasPara(cc.prova) : null;
-        h += '<div class="card"><div class="row"><b>' + esc(cc.nome) + '</b><span class="pill">' + esc(cc.banca) + '</span>' + (meus.length ? '<span class="pill ok">na sua lista</span>' : '') + '<span class="sp"></span><span class="small mut">' + esc(cc.prova ? 'Prova: ' + provaTxt(cc) + (d !== null && d >= 0 ? ' · faltam ' + d + ' dia(s)' : '') : 'Prova: sem data oficial') + '</span></div>' +
+        var meus = inscs().filter(function (i) { return i.c === cc.id; }), d = cc.prova ? diasPara(cc.prova) : null;
+        h += '<div class="card"><div class="row"><b>' + esc(cc.nome) + '</b><span class="pill">' + esc(cc.banca === 'A definir' ? (cc.modelo ? 'banca a definir (provável ' + cc.modelo + ')' : 'banca a definir') : cc.banca) + '</span><span class="pill ' + (cc.fase === 'abertas' ? 'ok' : cc.fase === 'previsto' ? 'warn' : '') + '">' + esc(rotFase(cc.fase)) + '</span>' + (meus.length ? '<span class="pill ok">na sua lista</span>' : '') + '<span class="sp"></span><span class="small mut">' + esc(cc.prova ? 'Prova: ' + provaTxt(cc) + (d !== null ? (d >= 0 ? ' · faltam ' + d + ' dia(s)' : ' · já realizada') : '') : 'Prova: sem data oficial') + '</span></div>' +
           '<div class="small mut" style="margin:.2rem 0">' + esc(cc.completo) + ' · ' + esc(cc.cidade) + '</div><p class="small" style="margin:.4rem 0">' + esc(cc.status) + '</p>' +
           '<div class="row" style="flex-wrap:wrap;gap:.4rem"><span class="small mut">Estudar como:</span>' + cc.niveis.map(function (n) { return '<button class="btn sm' + (S.concurso === cc.id && S.nivel === n ? ' pri' : '') + '" data-cc="' + cc.id + '" data-n="' + n + '">' + esc(nomeNivel(n)) + '</button>'; }).join('') + '<a class="btn sm" target="_blank" rel="noopener" href="' + esc(cc.busca) + '">Site da banca / busca</a></div></div>';
       });
@@ -1445,7 +1448,7 @@
       '<tr><th>Desempate</th><td>1º idoso (60+); 2º Específicos; 3º Português; 4º Legislação; 5º Raciocínio Lógico; 6º Gerais; 7º jurado; 8º idade maior (item 10.4)</td></tr></table></div>' +
       '<div class="card"><h3 style="margin-top:0">Regras do dia da prova (itens 9.3 e 9.2)</h3><ul><li>Caneta esferográfica <b>azul ou preta</b>, de corpo transparente.</li><li><b>Assinar</b> a Folha de Respostas (igual ao documento). Sem assinatura = eliminação.</li><li>Marque <b>uma</b> alternativa por questão; rasuras/emendas ou duas marcações anulam a questão.</li><li>Não amasse nem dobre a folha; não há substituição por erro do candidato.</li><li>Só pode sair definitivamente entregando a Folha de Respostas.</li><li>Não encontrei no corpo do edital desconto por erro: <b>confirmar no Anexo III</b>.</li></ul></div>' +
       '<div class="card"><h3 style="margin-top:0">Recursos (item 11)</h3><p>Fundamentado, sem identificação, até 3.000 caracteres, citando referência completa (capítulo e página). Questão anulada: ponto para todos.</p></div>' +
-      '<div class="card"><h3 style="margin-top:0">Outros concursos</h3><ul><li><b>Polícia Federal (Cebraspe)</b>: último edital em 2025; novo edital ainda não confirmado. Veja a categoria Federal em <a href="#/concursos">Concursos</a>.</li><li><b>SEMUSA (IBGP)</b>: edital nº 25/2026 publicado, 2.248 vagas, inscrições até 11/11, prova prevista para 13/12/2026.</li><li><b>IPAM (IBADE)</b>: edital publicado, ~70 vagas, inscrições de 03/11 a 07/12/2026, provas previstas em 21 e 28/02/2027.</li><li><b>SESAU-RO (IDECAN)</b>: banca definida, edital ainda não confirmado. Acompanhe os sites das bancas.</li></ul></div>';
+      '<div class="card"><h3 style="margin-top:0">Outros concursos</h3><p class="small mut">Federais (PF, PRF, Receita, Banco Central, INSS, CGU, TCU, IBGE), estaduais (SESAU-RO, PC-RO, PM-RO, SEFIN-RO) e municipais (SEMUSA, IPAM, Guarda de Porto Velho, Vilhena, Candeias do Jamari) estão em <a href="#/concursos">Concursos por categoria</a>, com a situação de cada edital e o filtro por banca e cidade.</p><ul><li><b>PRF:</b> edital ainda não publicado; pedido de cerca de 511 a 533 vagas.</li><li><b>SEMUSA (IBGP)</b>: edital nº 25/2026, 2.248 vagas, inscrições até 11/11, prova prevista para 13/12/2026.</li><li><b>IPAM (IBADE)</b>: edital publicado, ~70 vagas, inscrições de 03/11 a 07/12/2026, provas previstas em 21 e 28/02/2027.</li><li><b>SESAU-RO (IDECAN)</b>: banca definida, edital ainda não confirmado.</li></ul></div>';
   }
 
   /* ---------- Mais / Config ---------- */

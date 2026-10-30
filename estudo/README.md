@@ -58,7 +58,7 @@ Depois do cadastro tudo gira em torno de passar no nível escolhido:
 | Painel | contagem regressiva das provas, rotina do dia, próxima aula, progresso por matéria |
 | Trilha | 5 matérias, de 17 a 29 tópicos conforme o nível, cada um em 3 níveis (contexto, básico, aprofundado) |
 | Aula | texto, links para **videoaulas no YouTube** e **PDFs resumidos no Google** (buscas prontas), seus próprios links, apostila em PDF, teste rápido, anotação de 3 linhas, conclusão por volta |
-| Questões | 230 questões originais; ao responder, o site explica **cada alternativa**: por que a sua estava errada, por que a certa está certa e por que as outras não servem |
+| Questões | 239 questões originais; ao responder, o site explica **cada alternativa**: por que a sua estava errada, por que a certa está certa e por que as outras não servem |
 | Simulados | 50 questões / 3 h na distribuição da prova (10/10/10/15/5), ou mini de 20; correção por matéria e tópico com comentário de cada alternativa. O histórico guarda cada simulado: dá para **abrir de novo a correção** ou **refazer o mesmo** |
 | Caderno de erros | entra sozinho ao errar; motivo (não sabia, confundi, desatenção) e a regra correta |
 | Revisão | agenda automática em 1, 7 e 21 dias após concluir uma etapa |
@@ -102,3 +102,12 @@ Cada concurso usa o perfil da sua banca (`CONC.bancas` em `data/core.js`): **IBG
 ## Rascunho, calculadora e tira-dúvidas
 - Em cada questão (treino e simulado) há um **rascunho com calculadora** (`+ − * / ( ) %`), que fica salvo por questão e não some ao trocar de alternativa.
 - Em cada correção e na tela **Tire dúvidas** (Mais → Tire dúvidas) a pessoa escreve a pergunta: o site responde com um **glossário** (adjetivo, crase, porcentagem, conjuntos etc.) e com trechos das aulas. O site **não tem IA própria** (não há servidor); para uma explicação sob medida, os botões abrem o Claude ou o ChatGPT com a pergunta, a questão e as alternativas já preenchidas.
+
+## Mais concursos (atualizado em 30/10/2026)
+- **Federais previstos:** PRF (edital ainda não publicado; 511 a 533 vagas pedidas), Receita Federal (146 vagas autorizadas), Banco Central (170 vagas), INSS, CGU, TCU e IBGE, além da PF.
+- **Estaduais (RO):** PC-RO, PM-RO/Bombeiros (processo seletivo voluntário, inscrições até 17/11), SEFIN-RO e SESAU-RO.
+- **Municipais:** SEMED, SEMUSA e IPAM (Porto Velho), Guarda Municipal de Porto Velho, Prefeitura de Vilhena (Agente de Trânsito) e Câmara de Candeias do Jamari.
+- Cada concurso mostra a **situação do edital** (inscrições abertas, edital publicado, previsto, em andamento) e há filtros por categoria, situação, banca e cidade.
+- **Trilhas por concurso:** `policial` (PF, PRF, PC-RO, Guarda), `transito` (PRF, Vilhena: Código de Trânsito) e `base` (Português, Lógica, Constitucional, Administrativo e Informática, para os demais). Os Específicos de cada cargo (tributário, previdenciário etc.) ainda **não** estão no site.
+- Quando a banca ainda não foi definida, o site treina no modelo provável (ex.: Cebraspe para PRF) e avisa.
+- Tudo vem de notícias de 30/10/2026; confirme sempre no Diário Oficial e no site da banca.

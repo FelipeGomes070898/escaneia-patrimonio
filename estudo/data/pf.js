@@ -1,15 +1,15 @@
 /* Trilha da Polícia Federal (cargos de nível superior: Agente, Escrivão e Papiloscopista; banca Cebraspe).
    ESTRUTURA ESTIMADA: não li edital novo da PF. Conteúdos baseados nas matérias costumeiras da carreira policial federal;
-   tudo é A CONFIRMAR NO EDITAL quando sair. Os tópicos (so: ['pf']) só aparecem para quem estuda a Polícia Federal. */
+   tudo é A CONFIRMAR NO EDITAL quando sair. Os tópicos (so: ['pf']) só aparecem para quem estuda as trilhas policial ('policial') e base ('base'). */
 function PFT(id, titulo, busca, contexto, basico, aprof) {
-  return { id: id, titulo: titulo, provavel: true, so: ['pf'], nv: ['superior'], busca: busca,
+  return { id: id, titulo: titulo, provavel: true, so: ['policial'], nv: ['medio', 'superior'], busca: busca,
     contexto: '<p>' + contexto + '</p>',
     basico: '<ul>' + basico.map(function (x) { return '<li>' + x + '</li>'; }).join('') + '</ul>',
     aprofundado: '<ul>' + aprof.map(function (x) { return '<li>' + x + '</li>'; }).join('') + '</ul>' };
 }
 
 M({
-  id: 'pf-const', nome: 'Direito Constitucional (PF)', cor: '#1d4ed8', questoes: 10, peso: 'estimado',
+  id: 'pf-const', nome: 'Direito Constitucional', cor: '#1d4ed8', questoes: 10, peso: 'estimado',
   banca: 'Cebraspe cobra texto da Constituição e jurisprudência dos tribunais superiores. Conteúdo provável: A CONFIRMAR NO EDITAL.',
   topicos: [
     PFT('direitos-fund', 'Direitos e garantias fundamentais (art. 5º)', 'art 5 constituição federal direitos e garantias fundamentais resumo concurso polícia federal',
@@ -49,7 +49,7 @@ M({
   ]
 });
 M({
-  id: 'pf-adm', nome: 'Direito Administrativo (PF)', cor: '#0f766e', questoes: 10, peso: 'estimado',
+  id: 'pf-adm', nome: 'Direito Administrativo', cor: '#0f766e', questoes: 10, peso: 'estimado',
   banca: 'Conteúdo provável para carreiras policiais federais. A CONFIRMAR NO EDITAL.',
   topicos: [
     PFT('principios-atos', 'Princípios e atos administrativos', 'princípios administração pública atos administrativos elementos atributos revogação anulação resumo',
@@ -77,7 +77,7 @@ M({
   ]
 });
 M({
-  id: 'pf-penal', nome: 'Direito Penal (PF)', cor: '#b91c1c', questoes: 15, peso: 'estimado',
+  id: 'pf-penal', nome: 'Direito Penal', cor: '#b91c1c', questoes: 15, peso: 'estimado',
   banca: 'Parte geral e crimes contra a administração pública e contra a fé pública são temas recorrentes em carreiras policiais. A CONFIRMAR NO EDITAL.',
   topicos: [
     PFT('aplicacao-lei', 'Aplicação da lei penal no tempo e no espaço', 'código penal art 1 a 12 aplicação da lei penal tempo espaço territorialidade extraterritorialidade',
@@ -118,7 +118,7 @@ M({
   ]
 });
 M({
-  id: 'pf-proc', nome: 'Direito Processual Penal (PF)', cor: '#7c3aed', questoes: 10, peso: 'estimado',
+  id: 'pf-proc', nome: 'Direito Processual Penal', cor: '#7c3aed', questoes: 10, peso: 'estimado',
   banca: 'Inquérito, prisões e provas são o centro da rotina policial. A CONFIRMAR NO EDITAL.',
   topicos: [
     PFT('inquerito', 'Inquérito policial', 'inquérito policial características prazos código de processo penal arts 4 a 23',
@@ -157,7 +157,7 @@ M({
   ]
 });
 M({
-  id: 'pf-leis', nome: 'Legislação Especial (PF)', cor: '#c2410c', questoes: 10, peso: 'estimado',
+  id: 'pf-leis', nome: 'Legislação Especial', cor: '#c2410c', questoes: 10, peso: 'estimado',
   banca: 'Leis que a PF aplica no dia a dia: abuso de autoridade, organizações criminosas, drogas, armas e lavagem. A CONFIRMAR NO EDITAL.',
   topicos: [
     PFT('abuso-autoridade', 'Abuso de autoridade (Lei nº 13.869/2019)', 'lei 13869 2019 abuso de autoridade resumo crimes pena',
@@ -219,7 +219,7 @@ M({
   ]
 });
 M({
-  id: 'pf-info', nome: 'Informática (PF)', cor: '#0369a1', questoes: 10, peso: 'estimado',
+  id: 'pf-info', nome: 'Informática', cor: '#0369a1', questoes: 10, peso: 'estimado',
   banca: 'Segurança da informação, redes e conceitos básicos são comuns em provas da PF. A CONFIRMAR NO EDITAL.',
   topicos: [
     PFT('seguranca-info', 'Segurança da informação, malwares e criptografia', 'segurança da informação confidencialidade integridade disponibilidade malware phishing criptografia assinatura digital hash',
@@ -251,3 +251,6 @@ M({
 
 /* Português e Raciocínio Lógico são comuns: aparecem também na trilha da PF. */
 CONC.materias.forEach(function (m) { if (m.id === 'portugues' || m.id === 'logica') m.topicos.forEach(function (t) { t.pf = true; if (t.nv.indexOf('superior') < 0) t.nv.push('superior'); }); });
+
+/* Trilha base: Constitucional, Administrativo e Informática valem também para os demais concursos (federais, estaduais e municipais). */
+['pf-const', 'pf-adm', 'pf-info'].forEach(function (id) { CONC.materias.filter(function (m) { return m.id === id; })[0].topicos.forEach(function (t) { t.so = ['policial', 'base']; }); });
