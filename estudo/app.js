@@ -12,7 +12,7 @@
   function chaveSim() { return 'estudo.sim.' + UID; }
 
   /* ---------- Estado ---------- */
-  function defaults() { return { done: {}, answers: {}, erros: {}, rev: {}, notas: {}, links: {}, sims: [], cron: {}, meta: 5, tema: '', nivel: '', concurso: '', perfil: null, dia: {}, metaq: 30, metaNota: 70, visto: {}, retomar: null, quizAtual: null, conclAvisada: {}, rasc: {} }; }
+  function defaults() { return { done: {}, answers: {}, erros: {}, rev: {}, notas: {}, links: {}, sims: [], cron: {}, meta: 5, tema: '', nivel: '', concurso: '', perfil: null, dia: {}, metaq: 30, metaNota: 70, visto: {}, retomar: null, quizAtual: null, conclAvisada: {}, rasc: {}, cards: {} }; }
   var S = defaults();
   function carregar() { try { S = Object.assign(defaults(), JSON.parse(lsGet(chave()) || '{}')); } catch (e) { S = defaults(); } }
   function save() { if (UID) lsSet(chave(), JSON.stringify(S)); }
@@ -156,7 +156,7 @@
 
   /* ---------- Tempo de estudo: só conta com a página visível, com foco e com atividade ---------- */
   var T = { conta: false, ativo: false, input: Date.now(), tick: Date.now(), n: 0, m: null, t: null, estudo: false, sim: null, sess: null, motivo: '' };
-  var ESTUDO_ROTAS = ['aula', 'materia', 'quiz', 'simulado', 'simrev', 'erros', 'revisao', 'resumo', 'praticar', 'trilha'];
+  var ESTUDO_ROTAS = ['cartoes', 'duvidas', 'aula', 'materia', 'quiz', 'simulado', 'simrev', 'erros', 'revisao', 'resumo', 'praticar', 'trilha'];
   function idleMax() { return (window.ESTUDO_IDLE || 180) * 1000; } /* parado por 3 min = pausa */
   function tempoDe() { S.tempo = S.tempo || { site: 0, estudo: 0, dias: {}, diasEst: {}, mats: {}, topicos: {}, sessoes: [] }; if (!S.tempo.diasEst) S.tempo.diasEst = Object.assign({}, S.tempo.dias); /* versão antiga: dias só tinha estudo */ return S.tempo; }
   function atividade() { S.atividade = S.atividade || { entradas: 0, ultima: 0, ping: 0 }; return S.atividade; }
@@ -280,7 +280,7 @@
   function drawNav(h) {
     var cur = h.split('?')[0], chip = document.getElementById('nvchip'), ni = nvInfo();
     if (chip) { chip.hidden = !ni; chip.textContent = ni && S.concurso ? '🎓 ' + concInfo(S.concurso).nome + ' · ' + NV_CURTO[S.nivel] : ''; chip.title = 'Seu nível cadastrado. Toque para trocar.'; }
-    function on(href) { if (href === '#/') return cur === '#/' || cur === ''; if (href === '#/mais') return ['#/mais', '#/erros', '#/revisao', '#/cronograma', '#/edital', '#/concursos', '#/banca', '#/duvidas', '#/config', '#/conta', '#/resumo', '#/dono'].indexOf(cur) >= 0 || cur.indexOf('#/dono') === 0; return cur.indexOf(href) === 0 || (href === '#/trilha' && /^#\/(materia|aula)/.test(cur)) || (href === '#/praticar' && cur.indexOf('#/quiz') === 0); }
+    function on(href) { if (href === '#/') return cur === '#/' || cur === ''; if (href === '#/mais') return ['#/mais', '#/erros', '#/revisao', '#/cronograma', '#/edital', '#/concursos', '#/banca', '#/duvidas', '#/cartoes', '#/config', '#/conta', '#/resumo', '#/dono'].indexOf(cur) >= 0 || cur.indexOf('#/dono') === 0; return cur.indexOf(href) === 0 || (href === '#/trilha' && /^#\/(materia|aula)/.test(cur)) || (href === '#/praticar' && cur.indexOf('#/quiz') === 0); }
     var SIDE2 = mostraAreaDono() ? SIDE.concat([['#/dono', 'Dono', '🛡️']]) : SIDE;
     document.getElementById('sidenav').innerHTML = SIDE2.map(function (n) { return '<a href="' + n[0] + '" class="' + (on(n[0]) ? 'on' : '') + '">' + n[1] + '</a>'; }).join('');
     document.getElementById('bottomnav').innerHTML = NAV.map(function (n) { return '<a href="' + n[0] + '" class="' + (on(n[0]) ? 'on' : '') + '"><span class="ic">' + n[2] + '</span>' + n[1] + '</a>'; }).join('');
@@ -302,7 +302,7 @@
     var fn = {
       '': vPainel, trilha: vTrilha, materia: function () { vMateria(p[2]); }, aula: function () { vAula(p[2], p[3], q.aba); },
       praticar: vPraticar, simrev: function () { vSimRev(p[2]); }, quiz: function () { vQuiz(q); }, simulados: vSimulados, simulado: vSimRun, erros: vErros,
-      revisao: vRevisao, dono: function () { if (p[2]) vDonoUser(p[2]); else vDono(); }, resumo: function () { vResumo(p[2]); }, conta: vConta, nivel: vNivel, cadastro: vCadastro, cronograma: vCron, edital: vEdital, concursos: vConcursos, banca: vBanca, duvidas: vDuvidas, config: vConfig, mais: vMais
+      revisao: vRevisao, dono: function () { if (p[2]) vDonoUser(p[2]); else vDono(); }, resumo: function () { vResumo(p[2]); }, conta: vConta, nivel: vNivel, cadastro: vCadastro, cronograma: vCron, edital: vEdital, concursos: vConcursos, banca: vBanca, duvidas: vDuvidas, cartoes: vCartoes, config: vConfig, mais: vMais
     }[v] || vPainel;
     fn();
     window.scrollTo(0, 0);
@@ -588,7 +588,8 @@
       save();
     }
   }
-  function provaTxt(cc) { return cc.prova ? brDate(cc.prova.slice(0, 10)) + (cc.prova.length > 10 ? ' às ' + cc.prova.slice(11, 16).replace(':', 'h') : ' (horário a confirmar)') : 'sem data oficial'; }
+  function provaDe(cc, n) { return (cc.provaNivel && cc.provaNivel[n || S.nivel]) || cc.prova; }
+  function provaTxt(cc) { var pv = provaDe(cc); return pv ? brDate(pv.slice(0, 10)) + (pv.length > 10 ? ' às ' + pv.slice(11, 16).replace(':', 'h') : ' (horário a confirmar)') : 'sem data oficial'; }
 
   var nivelConfirmado = false;
   try { nivelConfirmado = sessionStorage.getItem('estudo.nvok') === '1'; } catch (e) { }
@@ -883,9 +884,10 @@
     var geral = acc(function () { return true; });
     var cc = concInfo(S.concurso);
     var h = '<h1>Olá, ' + esc(primeiroNome()) + '! Vamos estudar?</h1><p class="small mut" style="margin-top:-.3rem">Concurso: <b>' + esc(cc.nome) + ' (' + esc(cc.banca) + ')</b> · Nível: <b>' + esc(nvInfo().nome) + '</b> · <a href="#/' + (inscs().length > 1 ? 'nivel' : 'cadastro') + '">' + (inscs().length > 1 ? 'alternar' : 'editar cadastro') + '</a></p>';
-    if (cc.prova) { var d = diasPara(cc.prova); h += '<div class="card"><div class="mut small">Prova ' + esc(cc.nome) + ' (' + esc(cc.banca) + ')</div><div class="stat">' + (d >= 0 ? d + ' dias' : 'Prova realizada') + '</div><div class="small mut">' + esc(provaTxt(cc)) + ' (confirmar no edital)</div></div>'; }
+    if (cc.inscFim && diasPara(cc.inscFim) >= 0) { var di = diasPara(cc.inscFim); h += '<div class="card" style="border-left:6px solid var(--warn,#b45309)"><div class="mut small">Inscrições ' + esc(cc.nome) + ' (' + esc(cc.banca) + ')</div><div class="stat">' + (di === 0 ? 'Último dia' : 'Faltam ' + di + ' dia(s)') + '</div><div class="small mut">Até ' + brDate(cc.inscFim.slice(0, 10)) + ' às ' + cc.inscFim.slice(11, 16).replace(':', 'h') + ' (horário de Rondônia). Se ainda não se inscreveu, faça no site da banca.</div></div>'; }
+    if (provaDe(cc)) { var d = diasPara(provaDe(cc)); h += '<div class="card"><div class="mut small">Prova ' + esc(cc.nome) + ' (' + esc(cc.banca) + ')</div><div class="stat">' + (d >= 0 ? d + ' dias' : 'Prova realizada') + '</div><div class="small mut">' + esc(provaTxt(cc)) + ' (confirmar no edital)</div></div>'; }
     else h += '<div class="card"><div class="mut small">Prova ' + esc(cc.nome) + ' (' + esc(cc.banca) + ')</div><div class="stat">Data a definir</div><div class="small mut">' + esc(cc.status) + ' <a target="_blank" rel="noopener" href="' + esc(cc.busca) + '">Acompanhar a banca</a>. Enquanto isso, o cronograma usa a prova da SEMED como referência.</div></div>';
-    h += cardRetomar() + cardTempo() + cardMeta() + cardMissao() + cardBanca();
+    h += cardRetomar() + cardTempo() + cardMeta() + cardMissao() + cardCartoes() + cardBanca();
     h += '<div class="card"><div class="row"><b>' + esc(v.nome) + '</b></div><p class="small mut" style="margin:.3rem 0">Rotina do dia: teoria dirigida 60 min · questões 90 min · revisão ativa 30 min (resumo de 1 página + caderno de erros).</p>' + (prox ? '<a class="btn" href="#/aula/' + prox.m.id + '/' + prox.t.id + '">▶ Seguir a trilha: ' + esc(prox.t.titulo) + '</a>' : '<p>🎉 Você concluiu todos os tópicos desta volta.</p>') + '</div>';
     h += '<div class="grid c3"><div class="card"><div class="mut small">Revisões para hoje</div><div class="stat">' + due.length + '</div><a href="#/revisao">Abrir revisão</a></div>';
     h += '<div class="card"><div class="mut small">Meta da semana (' + feitosSem + '/' + S.meta + ' etapas)</div>' + bar(Math.min(100, pct(feitosSem, S.meta))) + '<div class="small mut" style="margin-top:.4rem">Ajuste em Ajustes.</div></div>';
@@ -973,6 +975,47 @@
     h += card(q.g, 'right', marcada === q.g ? '✔ Você acertou: por que está certa' : '✔ Gabarito: por que está certa');
     for (var k = 0; k < q.a.length; k++) if (k !== q.g && k !== marcada) h += card(k, 'other', '✘ Por que não é a resposta');
     return h + '</div>';
+  }
+
+  /* ---------- Cartões de memorização (revisão relâmpago, repetição espaçada) ---------- */
+  var CAIXAS = [0, 1, 3, 7, 14];
+  function cartoesVis() { return (C.cards || []).filter(function (c) { return visivel(c.m, c.t); }); }
+  function cartaoEst(c) { return (S.cards || {})[c.id]; }
+  function cartoesDevidos(lista) { var t = today(); return lista.filter(function (c) { var e = cartaoEst(c); return e && e.due <= t; }); }
+  function cartoesNovos(lista) { return lista.filter(function (c) { return !cartaoEst(c); }); }
+  function vCartoes(q) {
+    var todos = cartoesVis(), dev = cartoesDevidos(todos), nov = cartoesNovos(todos);
+    var dom = todos.filter(function (c) { var e = cartaoEst(c); return e && e.b >= 3; }).length;
+    var h = '<h1>Cartões de revisão relâmpago</h1><p class="mut">Pergunta na frente, resposta atrás. Quem você acerta volta em 1, 3, 7 e 14 dias; quem você erra volta amanhã. Ótimo para decorar prazos, penas, fórmulas e regras.</p>';
+    h += '<div class="grid c3"><div class="card"><div class="small mut">Para revisar hoje</div><div class="stat">' + dev.length + '</div></div><div class="card"><div class="small mut">Novos</div><div class="stat">' + nov.length + '</div></div><div class="card"><div class="small mut">Bem fixados</div><div class="stat">' + dom + '/' + todos.length + '</div></div></div>';
+    if (!todos.length) { $app.innerHTML = h + '<div class="card">Ainda não há cartões para a trilha deste concurso.</div>'; return; }
+    var porM = {}; todos.forEach(function (c) { porM[c.m] = (porM[c.m] || 0) + 1; });
+    h += '<div class="card"><label for="cm">Matéria</label><select id="cm"><option value="">Todas</option>' + Object.keys(porM).map(function (m) { return '<option value="' + m + '">' + esc(mat(m).nome) + ' (' + porM[m] + ')</option>'; }).join('') + '</select><p><button class="btn pri" id="cgo">Estudar agora</button></p></div>';
+    $app.innerHTML = h;
+    document.getElementById('cgo').onclick = function () { sessaoCartoes(document.getElementById('cm').value); };
+  }
+  function sessaoCartoes(m) {
+    var base = cartoesVis().filter(function (c) { return !m || c.m === m; });
+    var fila = shuffle(cartoesDevidos(base)).concat(shuffle(cartoesNovos(base))).slice(0, 15), i = 0, acertos = 0, errados = [];
+    if (!fila.length) { $app.innerHTML = '<div class="card"><p>Nada para revisar agora nesta matéria. Volte amanhã ou escolha outra.</p><a class="btn" href="#/cartoes">Voltar</a></div>'; return; }
+    function mostra() {
+      if (i >= fila.length) return fim();
+      var c = fila[i], mm = mat(c.m);
+      $app.innerHTML = '<div class="row"><span class="small mut">Cartão ' + (i + 1) + ' de ' + fila.length + ' · ' + esc(mm.nome) + '</span></div>' + bar(pct(i, fila.length)) +
+        '<div class="card" style="text-align:center;padding:1.2rem"><p class="q-enun" style="font-size:1.15rem">' + esc(c.f) + '</p><div id="ct-v" hidden class="expl" style="text-align:left"><b>Resposta:</b> ' + esc(c.v) + '</div><p><button class="btn pri" id="ct-mostra">Mostrar resposta</button></p><div id="ct-bt" class="row" hidden style="justify-content:center"><button class="btn" id="ct-err">✘ Errei</button><button class="btn pri" id="ct-ok">✔ Acertei</button></div></div>';
+      document.getElementById('ct-mostra').onclick = function () { document.getElementById('ct-v').hidden = false; document.getElementById('ct-bt').hidden = false; this.hidden = true; };
+      function grava(ok) {
+        var e = cartaoEst(c) || { b: 0 }; e.b = ok ? Math.min(CAIXAS.length - 1, e.b + 1) : 0; e.due = addDays(today(), ok ? CAIXAS[e.b] : 1);
+        S.cards = S.cards || {}; S.cards[c.id] = e; S.dia = S.dia || {}; save();
+        if (ok) acertos++; else errados.push(c); i++; mostra();
+      }
+      document.getElementById('ct-ok').onclick = function () { grava(true); };
+      document.getElementById('ct-err').onclick = function () { grava(false); };
+    }
+    function fim() {
+      $app.innerHTML = '<div class="card"><h1>Sessão concluída</h1><div class="stat">' + acertos + ' / ' + fila.length + '</div><p>' + (errados.length ? 'Os cartões errados voltam amanhã. Releia: <ul>' + errados.map(function (c) { return '<li>' + esc(c.f) + '</li>'; }).join('') + '</ul>' : 'Todos certos! Eles voltam nos próximos dias para fixar.') + '</p><div class="row"><a class="btn pri" href="#/cartoes">Mais cartões</a><a class="btn" href="#/">Painel</a></div></div>';
+    }
+    mostra();
   }
 
   /* ---------- Rascunho com calculadora (por questão) ---------- */
@@ -1387,6 +1430,11 @@
     document.getElementById('f-cont').textContent = n + ' concurso(s)';
   }
 
+  function cardCartoes() {
+    var todos = cartoesVis(); if (!todos.length) return '';
+    var dev = cartoesDevidos(todos).length, nov = cartoesNovos(todos).length;
+    return '<div class="card"><div class="row"><b>🃏 Revisão relâmpago</b><span class="sp"></span><span class="pill">' + dev + ' para revisar · ' + nov + ' novos</span></div><p class="small mut" style="margin:.3rem 0">Cartões curtos de prazos, penas, fórmulas e regras, com repetição espaçada. 5 minutos por dia fixam muito.</p><a class="btn sm pri" href="#/cartoes">Revisar agora</a></div>';
+  }
   function cardBanca() {
     var b = bancaAtual();
     return '<div class="card"><div class="row"><b>🎯 Como a banca ' + esc(b.nome) + ' cobra</b></div><p class="small" style="margin:.3rem 0">' + b.tipo + '</p><ul class="small" style="margin:.2rem 0;padding-left:1.1rem"><li>' + b.estrategia[0] + '</li><li>' + b.estrategia[1] + '</li></ul><a class="btn sm pri" href="#/banca">Ver estratégia completa da banca</a></div>';
@@ -1411,14 +1459,14 @@
   var filtInicial = false;
   function vConcursos() {
     if (!filtInicial) { filtInicial = true; FILT = { esfera: '', fase: 'previsto', banca: '', cidade: '' }; }
-    var h = '<h1>Concursos por categoria</h1><p class="mut">Veja primeiro os concursos <b>previstos para sair</b> (ainda sem edital). Os dados vêm de notícias de 30/10/2026 e dos editais; <b>confirme sempre no edital oficial da banca</b>.' + (FILT.fase === 'previsto' ? ' Para ver também os que já têm edital publicado ou inscrições abertas (SEMED, SEMUSA, IPAM), toque em <b>Limpar filtros</b>.' : '') + '</p>' + barraFiltroHtml();
+    var h = '<h1>Concursos por categoria</h1><p class="mut">Veja primeiro os concursos <b>previstos para sair</b> (ainda sem edital). Os dados vêm de notícias de 03/11/2026 e dos editais; <b>confirme sempre no edital oficial da banca</b>.' + (FILT.fase === 'previsto' ? ' Para ver também os que já têm edital publicado ou inscrições abertas (SEMED, SEMUSA, IPAM), toque em <b>Limpar filtros</b>.' : '') + '</p>' + barraFiltroHtml();
     C.esferas.forEach(function (es) {
       var lista = C.concursos.filter(function (cc) { return cc.esfera === es.id && casa(cc, FILT); }).sort(function (a, b) { return C.fases.map(function (x) { return x.id; }).indexOf(a.fase) - C.fases.map(function (x) { return x.id; }).indexOf(b.fase); });
       if (!lista.length) return;
       h += '<h2>' + es.icone + ' ' + es.nome + '</h2>';
       lista.forEach(function (cc) {
-        var meus = inscs().filter(function (i) { return i.c === cc.id; }), d = cc.prova ? diasPara(cc.prova) : null;
-        h += '<div class="card"><div class="row"><b>' + esc(cc.nome) + '</b><span class="pill">' + esc(cc.banca === 'A definir' ? (cc.modelo ? 'banca a definir (provável ' + cc.modelo + ')' : 'banca a definir') : cc.banca) + '</span><span class="pill ' + (cc.fase === 'abertas' ? 'ok' : cc.fase === 'previsto' ? 'warn' : '') + '">' + esc(rotFase(cc.fase)) + '</span>' + (meus.length ? '<span class="pill ok">na sua lista</span>' : '') + '<span class="sp"></span><span class="small mut">' + esc(cc.prova ? 'Prova: ' + provaTxt(cc) + (d !== null ? (d >= 0 ? ' · faltam ' + d + ' dia(s)' : ' · já realizada') : '') : 'Prova: sem data oficial') + '</span></div>' +
+        var meus = inscs().filter(function (i) { return i.c === cc.id; }), d = provaDe(cc, cc.niveis.indexOf(S.nivel) >= 0 ? S.nivel : cc.niveis[0]) ? diasPara(provaDe(cc, cc.niveis.indexOf(S.nivel) >= 0 ? S.nivel : cc.niveis[0])) : null;
+        h += '<div class="card"><div class="row"><b>' + esc(cc.nome) + '</b><span class="pill">' + esc(cc.banca === 'A definir' ? (cc.modelo ? 'banca a definir (provável ' + cc.modelo + ')' : 'banca a definir') : cc.banca) + '</span><span class="pill ' + (cc.fase === 'abertas' ? 'ok' : cc.fase === 'previsto' ? 'warn' : '') + '">' + esc(rotFase(cc.fase)) + '</span>' + (meus.length ? '<span class="pill ok">na sua lista</span>' : '') + '<span class="sp"></span><span class="small mut">' + esc(provaDe(cc) ? 'Prova: ' + provaTxt(cc) + (d !== null ? (d >= 0 ? ' · faltam ' + d + ' dia(s)' : ' · já realizada') : '') : 'Prova: sem data oficial') + '</span></div>' +
           '<div class="small mut" style="margin:.2rem 0">' + esc(cc.completo) + ' · ' + esc(cc.cidade) + '</div><p class="small" style="margin:.4rem 0">' + esc(cc.status) + '</p>' +
           '<div class="row" style="flex-wrap:wrap;gap:.4rem"><span class="small mut">Estudar como:</span>' + cc.niveis.map(function (n) { return '<button class="btn sm' + (S.concurso === cc.id && S.nivel === n ? ' pri' : '') + '" data-cc="' + cc.id + '" data-n="' + n + '">' + esc(nomeNivel(n)) + '</button>'; }).join('') + '<a class="btn sm" target="_blank" rel="noopener" href="' + esc(cc.busca) + '">Site da banca / busca</a></div></div>';
       });
@@ -1455,7 +1503,7 @@
 
   /* ---------- Mais / Config ---------- */
   function vMais() {
-    $app.innerHTML = '<h1>Mais</h1><div class="card list">' + [['#/erros', '📓 Caderno de erros'], ['#/revisao', '🔁 Revisão espaçada'], ['#/cronograma', '📅 Cronograma'], ['#/resumo', '📚 Resumo do que estudei'], ['#/duvidas', '💬 Tire dúvidas'], ['#/banca', '🎯 Estilo da banca e como pontuar'], ['#/concursos', '🗂️ Concursos por categoria'], ['#/edital', '📄 Edital e regras da prova'], ['#/conta', '👤 Minha conta e sair']].concat(mostraAreaDono() ? [['#/dono', '🛡️ Área do dono']] : []).concat([ ['#/config', '⚙️ Ajustes e backup']]).map(function (x) { return '<a class="item" href="' + x[0] + '">' + x[1] + '</a>'; }).join('') + '</div>';
+    $app.innerHTML = '<h1>Mais</h1><div class="card list">' + [['#/erros', '📓 Caderno de erros'], ['#/revisao', '🔁 Revisão espaçada'], ['#/cronograma', '📅 Cronograma'], ['#/resumo', '📚 Resumo do que estudei'], ['#/cartoes', '🃏 Cartões de revisão relâmpago'], ['#/duvidas', '💬 Tire dúvidas'], ['#/banca', '🎯 Estilo da banca e como pontuar'], ['#/concursos', '🗂️ Concursos por categoria'], ['#/edital', '📄 Edital e regras da prova'], ['#/conta', '👤 Minha conta e sair']].concat(mostraAreaDono() ? [['#/dono', '🛡️ Área do dono']] : []).concat([ ['#/config', '⚙️ Ajustes e backup']]).map(function (x) { return '<a class="item" href="' + x[0] + '">' + x[1] + '</a>'; }).join('') + '</div>';
   }
   function vConfig() {
     $app.innerHTML = '<h1>Ajustes</h1><div class="card"><h3 style="margin-top:0">Meu cadastro</h3><p class="small mut" style="margin:0 0 .4rem">Conta: ' + esc(mostraLogin((usuarioAtual() || {}).login || '')) + ' · <a href="#/conta">Minha conta / sair</a></p><p class="small">' + esc(S.perfil.nome) + ' · ' + inscs().map(rotulo).map(esc).join(', ') + '</p><label for="nv">Estou estudando para</label><select id="nv">' + inscs().map(function (i, k) { return '<option value="' + k + '"' + (i.c === S.concurso && i.n === S.nivel ? ' selected' : '') + '>' + esc(rotulo(i)) + '</option>'; }).join('') + '</select><p class="small mut">Muda os tópicos, questões, simulado e apostilas. Seu progresso é mantido.</p><a class="btn sm" href="#/cadastro">✎ Editar cadastro / adicionar nível</a></div><div class="card"><h3 style="margin-top:0">Minha meta</h3><label for="mn">Meta de acertos na prova (%) - a nota mínima é 50%</label><input type="number" id="mn" min="50" max="100" value="' + metaNota() + '"><label for="mq">Questões por dia</label><input type="number" id="mq" min="5" max="200" value="' + (S.metaq || 30) + '"></div><div class="card"><label for="meta">Meta semanal (etapas concluídas por semana)</label><input type="number" id="meta" min="1" max="40" value="' + S.meta + '"></div>' +
