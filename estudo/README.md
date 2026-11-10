@@ -58,7 +58,7 @@ Depois do cadastro tudo gira em torno de passar no nível escolhido:
 | Painel | contagem regressiva das provas, rotina do dia, próxima aula, progresso por matéria |
 | Trilha | 5 matérias, de 17 a 29 tópicos conforme o nível, cada um em 3 níveis (contexto, básico, aprofundado) |
 | Aula | texto, links para **videoaulas no YouTube** e **PDFs resumidos no Google** (buscas prontas), seus próprios links, apostila em PDF, teste rápido, anotação de 3 linhas, conclusão por volta |
-| Questões | 260 questões originais; ao responder, o site explica **cada alternativa**: por que a sua estava errada, por que a certa está certa e por que as outras não servem |
+| Questões | 272 questões originais; ao responder, o site explica **cada alternativa**: por que a sua estava errada, por que a certa está certa e por que as outras não servem |
 | Simulados | 50 questões / 3 h na distribuição da prova (10/10/10/15/5), ou mini de 20; correção por matéria e tópico com comentário de cada alternativa. O histórico guarda cada simulado: dá para **abrir de novo a correção** ou **refazer o mesmo** |
 | Caderno de erros | entra sozinho ao errar; motivo (não sabia, confundi, desatenção) e a regra correta |
 | Revisão | agenda automática em 1, 7 e 21 dias após concluir uma etapa |
@@ -120,3 +120,9 @@ Cada concurso usa o perfil da sua banca (`CONC.bancas` em `data/core.js`): **IBG
 - **LC nº 385/2010 (servidores de Porto Velho):** 3 tópicos novos de Legislação, feitos a partir do texto consolidado do SAPL da Câmara (vigência 21/05/2019), com 21 questões comentadas. O texto pode ter sido alterado depois: conferir.
 - **Cartões de revisão relâmpago** (Mais → Cartões): 76 cartões curtos com repetição espaçada (1, 3, 7 e 14 dias).
 - 260 questões comentadas no total.
+
+## Atualização de 10/11/2026
+- **SEMED e SEMUSA:** inscrições terminam em **11/11 às 16h**, sem prorrogação noticiada; o painel mostra "Termina amanhã" no penúltimo dia.
+- **IPAM:** cargos de Técnico Autárquico (Administrativa e Informática; R$ 3.000) e Analista Autárquico (Direito, Gestão Financeira, Médico Perito, Serviço Social etc.; R$ 5.000); nova trilha própria (Português, Lógica, Constitucional, Administrativo, Informática e **Noções de Previdência e Seguridade**: seguridade social, RPPS, RGPS, assistência e saúde, 12 questões e 6 cartões). Conteúdo provável: o Anexo III do edital do IBADE não foi lido.
+- **Receita:** a contratação da banca deve sair em novembro e o edital em dezembro (assessoria do órgão, 09/11). Bacen, PRF, INSS e SESAU-RO sem novidade.
+- 272 questões comentadas.
