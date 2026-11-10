@@ -578,7 +578,7 @@
   function ceTexto(q) { return 'Julgue o item. ' + q.q + ' Afirmação: a resposta correta é "' + q.a[ceItem(q).alt] + '".'; }
   function ceAcertou(q, r) { return r != null && (r === 'C') === ceItem(q).certo; }
   function ceRot(r) { return r === 'C' ? 'Certo' : r === 'E' ? 'Errado' : '--'; }
-  function pdfKey() { var tr = concInfo(S.concurso).trilhas; return tr ? (tr.indexOf('policial') >= 0 ? (tr.indexOf('transito') >= 0 ? 'prf' : 'pf') : 'base-' + S.nivel) : S.nivel; }
+  function pdfKey() { var tr = concInfo(S.concurso).trilhas; return tr ? (tr.indexOf('policial') >= 0 ? (tr.indexOf('transito') >= 0 ? 'prf' : 'pf') : tr.indexOf('previdencia') >= 0 ? 'ipam-' + S.nivel : 'base-' + S.nivel) : S.nivel; }
   function concDesc(c) { return concInfo(c).esfera === 'federal' ? 'Concurso federal' : concInfo(c).esfera === 'estadual' ? 'Concurso estadual' : 'Concurso municipal'; } /* só esta combinação tem edital lido */
   function primeiroNome() { return S.perfil ? String(S.perfil.nome).split(' ')[0] : ''; }
   function marcaSessao() { nivelConfirmado = true; try { sessionStorage.setItem('estudo.nvok', '1'); } catch (e) { } }
@@ -872,6 +872,7 @@
 
   /* ---------- Painel ---------- */
   var RITMO = { 1: ['portugues', 'Português'], 2: ['logica', 'Raciocínio Lógico'], 3: ['legislacao', 'Legislação'], 4: ['especificos', 'Conhecimentos Específicos'], 5: [null, 'Revisão e Conhecimentos Gerais'], 6: [null, 'Simulado'], 0: [null, 'Caderno de erros (dia leve)'] };
+  function textoPrazo(dt) { var h = (new Date(dt) - new Date()) / 3600000; return h <= 24 ? 'Último dia: termina hoje' : h <= 48 ? 'Termina amanhã' : 'Faltam ' + Math.ceil(h / 24) + ' dias'; }
   function diasPara(dt) { return Math.ceil((new Date(dt) - new Date()) / 86400000); }
   function vPainel() {
     var v = voltaAtual(), wd = new Date().getDay(), r = RITMO[wd];
@@ -884,7 +885,7 @@
     var geral = acc(function () { return true; });
     var cc = concInfo(S.concurso);
     var h = '<h1>Olá, ' + esc(primeiroNome()) + '! Vamos estudar?</h1><p class="small mut" style="margin-top:-.3rem">Concurso: <b>' + esc(cc.nome) + ' (' + esc(cc.banca) + ')</b> · Nível: <b>' + esc(nvInfo().nome) + '</b> · <a href="#/' + (inscs().length > 1 ? 'nivel' : 'cadastro') + '">' + (inscs().length > 1 ? 'alternar' : 'editar cadastro') + '</a></p>';
-    if (cc.inscFim && diasPara(cc.inscFim) >= 0) { var di = diasPara(cc.inscFim); h += '<div class="card" style="border-left:6px solid var(--warn,#b45309)"><div class="mut small">Inscrições ' + esc(cc.nome) + ' (' + esc(cc.banca) + ')</div><div class="stat">' + (di === 0 ? 'Último dia' : 'Faltam ' + di + ' dia(s)') + '</div><div class="small mut">Até ' + brDate(cc.inscFim.slice(0, 10)) + ' às ' + cc.inscFim.slice(11, 16).replace(':', 'h') + ' (horário de Rondônia). Se ainda não se inscreveu, faça no site da banca.</div></div>'; }
+    if (cc.inscFim && diasPara(cc.inscFim) >= 0) { var di = diasPara(cc.inscFim); h += '<div class="card" style="border-left:6px solid var(--warn,#b45309)"><div class="mut small">Inscrições ' + esc(cc.nome) + ' (' + esc(cc.banca) + ')</div><div class="stat">' + textoPrazo(cc.inscFim) + '</div><div class="small mut">Até ' + brDate(cc.inscFim.slice(0, 10)) + ' às ' + cc.inscFim.slice(11, 16).replace(':', 'h') + ' (horário de Rondônia). Se ainda não se inscreveu, faça no site da banca.</div></div>'; }
     if (provaDe(cc)) { var d = diasPara(provaDe(cc)); h += '<div class="card"><div class="mut small">Prova ' + esc(cc.nome) + ' (' + esc(cc.banca) + ')</div><div class="stat">' + (d >= 0 ? d + ' dias' : 'Prova realizada') + '</div><div class="small mut">' + esc(provaTxt(cc)) + ' (confirmar no edital)</div></div>'; }
     else h += '<div class="card"><div class="mut small">Prova ' + esc(cc.nome) + ' (' + esc(cc.banca) + ')</div><div class="stat">Data a definir</div><div class="small mut">' + esc(cc.status) + ' <a target="_blank" rel="noopener" href="' + esc(cc.busca) + '">Acompanhar a banca</a>. Enquanto isso, o cronograma usa a prova da SEMED como referência.</div></div>';
     h += cardRetomar() + cardTempo() + cardMeta() + cardMissao() + cardCartoes() + cardBanca();
