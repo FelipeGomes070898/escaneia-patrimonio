@@ -30,11 +30,11 @@ const srv = http.createServer((req, res) => {
   }
   /* Trilhas por concurso: pf (policial), prf (policial + trânsito) e base (comum a vários concursos), nível superior */
   const trilhas = [
-    ['pf', 'pf', ['portugues', 'logica', 'pf-const', 'pf-adm', 'pf-penal', 'pf-proc', 'pf-leis', 'pf-info', 'completa'], 'Polícia Federal e carreiras policiais'],
-    ['prf', 'prf', ['portugues', 'logica', 'pf-const', 'pf-adm', 'pf-penal', 'pf-proc', 'pf-leis', 'pf-info', 'prf-transito', 'completa'], 'PRF'],
+    ['pf', 'pf', ['portugues', 'logica', 'pf-const', 'pf-adm', 'pf-penal', 'pf-proc', 'pf-dh', 'pf-leis', 'pf-info', 'pf-contab', 'completa'], 'Polícia Federal e carreiras policiais'],
+    ['prf', 'prf', ['portugues', 'logica', 'pf-const', 'pf-adm', 'pf-penal', 'pf-proc', 'pf-dh', 'pf-leis', 'pf-info', 'prf-transito', 'completa'], 'PRF'],
     ['base-medio', 'inss', ['portugues', 'logica', 'pf-const', 'pf-adm', 'pf-info', 'completa'], 'Matérias comuns (nível médio)', 'medio'],
-    ['ipam-medio', 'ipam', ['portugues', 'logica', 'pf-const', 'pf-adm', 'pf-info', 'previdencia', 'completa'], 'IPAM e institutos de previdência (nível médio)', 'medio'],
-    ['ipam-superior', 'ipam', ['portugues', 'logica', 'pf-const', 'pf-adm', 'pf-info', 'previdencia', 'completa'], 'IPAM e institutos de previdência (nível superior)', 'superior'],
+    ['ipam-medio', 'ipam', ['portugues', 'logica', 'pf-const', 'pf-adm', 'pf-info', 'previdencia', 'legislacao', 'completa'], 'IPAM e institutos de previdência (nível médio)', 'medio'],
+    ['ipam-superior', 'ipam', ['portugues', 'logica', 'pf-const', 'pf-adm', 'pf-info', 'previdencia', 'legislacao', 'completa'], 'IPAM e institutos de previdência (nível superior)', 'superior'],
     ['base-superior', 'receita', ['portugues', 'logica', 'pf-const', 'pf-adm', 'pf-info', 'completa'], 'Matérias comuns (nível superior)', 'superior']
   ];
   for (const [chave, cid, ids2, rotulo, nvt] of trilhas) for (const id of ids2) {
