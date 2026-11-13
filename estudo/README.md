@@ -58,7 +58,7 @@ Depois do cadastro tudo gira em torno de passar no nível escolhido:
 | Painel | contagem regressiva das provas, rotina do dia, próxima aula, progresso por matéria |
 | Trilha | 5 matérias, de 17 a 29 tópicos conforme o nível, cada um em 3 níveis (contexto, básico, aprofundado) |
 | Aula | texto, links para **videoaulas no YouTube** e **PDFs resumidos no Google** (buscas prontas), seus próprios links, apostila em PDF, teste rápido, anotação de 3 linhas, conclusão por volta |
-| Questões | 272 questões originais; ao responder, o site explica **cada alternativa**: por que a sua estava errada, por que a certa está certa e por que as outras não servem |
+| Questões | 314 questões originais; ao responder, o site explica **cada alternativa**: por que a sua estava errada, por que a certa está certa e por que as outras não servem |
 | Simulados | 50 questões / 3 h na distribuição da prova (10/10/10/15/5), ou mini de 20; correção por matéria e tópico com comentário de cada alternativa. O histórico guarda cada simulado: dá para **abrir de novo a correção** ou **refazer o mesmo** |
 | Caderno de erros | entra sozinho ao errar; motivo (não sabia, confundi, desatenção) e a regra correta |
 | Revisão | agenda automática em 1, 7 e 21 dias após concluir uma etapa |
@@ -126,3 +126,11 @@ Cada concurso usa o perfil da sua banca (`CONC.bancas` em `data/core.js`): **IBG
 - **IPAM:** cargos de Técnico Autárquico (Administrativa e Informática; R$ 3.000) e Analista Autárquico (Direito, Gestão Financeira, Médico Perito, Serviço Social etc.; R$ 5.000); nova trilha própria (Português, Lógica, Constitucional, Administrativo, Informática e **Noções de Previdência e Seguridade**: seguridade social, RPPS, RGPS, assistência e saúde, 12 questões e 6 cartões). Conteúdo provável: o Anexo III do edital do IBADE não foi lido.
 - **Receita:** a contratação da banca deve sair em novembro e o edital em dezembro (assessoria do órgão, 09/11). Bacen, PRF, INSS e SESAU-RO sem novidade.
 - 272 questões comentadas.
+
+## Atualização de 13/11/2026: estudo conforme o edital e a banca
+- **SEMED e SEMUSA: inscrições PRORROGADAS até 16/11/2026, às 16h** (Prefeitura, 12/11). Cada concurso agora mostra a **data de inscrição** e o **link oficial** (cartões, painel e tela Edital).
+- **IPAM (IBADE) com edital real lido** (Diário Oficial dos Municípios, 29/10/2026): a tela **Edital** traz estrutura e pesos (30 questões gerais de peso 1 e 50 específicas de peso 2: os Específicos são 77% dos 130 pontos), regras de eliminação (50% dos pontos, **zero em qualquer disciplina elimina**, posição de corte por cargo), regras do dia da prova, desempate, cronograma, **conteúdo oficial do Anexo III dos 15 cargos** com atalhos de busca e uma calculadora de meta nos Específicos.
+- **Trilha do IPAM** alinhada ao edital: Português, Lógica, Informática (Windows/Office/Internet), Administração Pública (autarquias, LAI, LGPD), Constitucional/Administrativo e Previdência, com a **LC 404/2010** (texto consolidado do SAPL: segurados, dependentes, custeio, benefícios) e a LC 385/2010.
+- **PF**: estrutura atualizada pelo edital de 2025 (120 itens: Bloco I 60, Bloco II Informática 36, Bloco III Contabilidade 24; +1/−1/0; mínimos 6, 3, 2 e 48 pontos). Matérias novas: Direitos Humanos (Lei 13.060, Havana, tortura) e Contabilidade Geral. O resultado do simulado da PF confere os mínimos por bloco.
+- **Estratégia por banca**: missão do dia com tarefa da banca; alerta de disciplina zerada (IBADE); palavras-alerta nas alternativas; tempo por questão comparado com a meta da banca; aproveitamento dos itens marcados (Cebraspe).
+- 314 questões comentadas e 93 cartões.

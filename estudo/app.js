@@ -12,7 +12,7 @@
   function chaveSim() { return 'estudo.sim.' + UID; }
 
   /* ---------- Estado ---------- */
-  function defaults() { return { done: {}, answers: {}, erros: {}, rev: {}, notas: {}, links: {}, sims: [], cron: {}, meta: 5, tema: '', nivel: '', concurso: '', perfil: null, dia: {}, metaq: 30, metaNota: 70, visto: {}, retomar: null, quizAtual: null, conclAvisada: {}, rasc: {}, cards: {} }; }
+  function defaults() { return { done: {}, answers: {}, erros: {}, rev: {}, notas: {}, links: {}, sims: [], cron: {}, meta: 5, tema: '', nivel: '', concurso: '', perfil: null, dia: {}, metaq: 30, metaNota: 70, visto: {}, retomar: null, quizAtual: null, conclAvisada: {}, rasc: {}, cards: {}, cargo: {} }; }
   var S = defaults();
   function carregar() { try { S = Object.assign(defaults(), JSON.parse(lsGet(chave()) || '{}')); } catch (e) { S = defaults(); } }
   function save() { if (UID) lsSet(chave(), JSON.stringify(S)); }
@@ -31,7 +31,7 @@
   function topico(m, t) { var mm = mat(m); return mm && mm.topicos.filter(function (x) { return x.id === t; })[0]; }
   function nvInfo() { return C.niveis.filter(function (n) { return n.id === S.nivel; })[0]; }
   /* Tópico visível: nível certo e trilha certa. Concursos com trilhas (policial, base, transito) veem os tópicos dessas trilhas (so) e os comuns marcados pf; os demais não veem tópicos exclusivos (so). */
-  function tvis(t) { var cc = concInfo(S.concurso); if (t.nv.indexOf(S.nivel) < 0) return false; var tr = cc.trilhas; if (tr) return t.so ? t.so.some(function (x) { return tr.indexOf(x) >= 0; }) : t.pf === true; return !t.so; }
+  function tvis(t) { var cc = concInfo(S.concurso); if (t.nv.indexOf(S.nivel) < 0) return false; var tr = cc.trilhas; if (tr) { var cruza = function (l) { return !!l && l.some(function (x) { return tr.indexOf(x) >= 0; }); }; return t.so ? cruza(t.so) : (t.pf === true || cruza(t.also)); } return !t.so; }
   function distAtual() { return concInfo(S.concurso).dist || C.dist[S.nivel]; }
   function topsOf(m) { return m.topicos.filter(tvis); }
   function mats() { return C.materias.filter(function (m) { return topsOf(m).length; }); }
@@ -563,7 +563,8 @@
   function nomeNivel(id) { var n = C.niveis.filter(function (x) { return x.id === id; })[0]; return n ? n.nome : id; }
   function rotulo(i) { return concInfo(i.c).nome + ' · ' + nomeNivel(i.n); }
   function setAlvo(c, n) { S.concurso = c; S.nivel = n; }
-  function estrConf() { return S.concurso === 'semed' && S.nivel === 'medio'; }
+  function estrConf() { return (S.concurso === 'semed' && S.nivel === 'medio') || !!(distAtual() && distAtual().confirmada); }
+  function notaParcial() { var d = distAtual(); return d && d.parcial ? '<p class="aviso">' + esc(d.parcial) + '</p>' : ''; }
   /* ---------- Estilo da banca ---------- */
   function bancaDe(cid) { var cc = concInfo(cid); return C.bancas[cc.banca === 'A definir' && cc.modelo ? cc.modelo : cc.banca] || C.bancas['A definir']; }
   function bancaAtual() { return bancaDe(S.concurso); }
@@ -822,11 +823,19 @@
       ts.forEach(function (t) {
         if (!qsOf(m.id, t.id).length) return; // sem questões não dá para medir: fica só na trilha
         var a = accOf(qsOf(m.id, t.id)), w = (d[m.id] || 0) / tot / ts.length, nova = !topicDone(m.id, t.id, 1);
-        var gap = a.t >= 2 ? 1 - a.p : 0.6;
-        out.push({ m: m, t: t, a: a, nova: nova, score: w * (gap + (nova ? 0.15 : 0)) });
+        var gap = a.t >= 2 ? 1 - a.p : 0.6, risco = riscoZero(m) ? 1.6 : 1;
+        out.push({ m: m, t: t, a: a, nova: nova, score: w * (gap + (nova ? 0.15 : 0)) * risco });
       });
     });
     return out.sort(function (x, y) { return y.score - x.score; });
+  }
+  /* Bancas que eliminam por disciplina zerada (IBADE): matéria ainda sem nenhum acerto no treino */
+  function zeraElimina() { return bancaAtual().nome === 'IBADE'; }
+  function riscoZero(m) { if (!zeraElimina() || !(dqs()[m.id] > 0)) return false; var a = accOf(qsOf(m.id)); return a.t === 0 || a.h === 0; }
+  function cardAlertaZerar() {
+    if (!zeraElimina()) return '';
+    var risco = mats().filter(riscoZero); if (!risco.length) return '<div class="card" style="border-left:6px solid var(--ok,#15803d)"><b>✅ Nenhuma disciplina zerada</b><p class="small mut" style="margin:.2rem 0">Na IBADE zerar uma disciplina elimina. Continue garantindo pontos em todas.</p></div>';
+    return '<div class="card" style="border-left:6px solid var(--bad,#b91c1c)"><b>⚠ Risco de zerar disciplina (elimina na IBADE)</b><p class="small" style="margin:.3rem 0">Ainda sem acertos no treino: <b>' + risco.map(function (m) { return esc(m.nome); }).join(', ') + '</b>. Cada disciplina tem poucas questões: garanta ao menos 1 acerto em cada.</p><a class="btn sm pri" href="#/quiz?m=' + risco[0].id + '&n=10">Treinar ' + esc(risco[0].nome) + ' agora</a></div>';
   }
   function motivo(x) { return (x.a.t >= 2 ? 'acerto ' + Math.round(x.a.p * 100) + '%' : 'sem dados ainda') + (x.nova ? ' · ainda não estudado' : ''); }
   function listaFoco(n) {
@@ -863,6 +872,7 @@
     if (due.length) h += item(false, 'Revisar <b>' + due.length + '</b> tópico(s) agendado(s)', '#/revisao');
     if (top) h += item(false, 'Estudar o ponto de maior retorno: <b>' + esc(top.t.titulo) + '</b><div class="small mut">' + esc(top.m.nome) + ' · ' + motivo(top) + '</div>', '#/aula/' + top.m.id + '/' + top.t.id);
     h += item(feitas >= 10, 'Treino focado: 10 questões nos seus pontos fracos', '#/quiz?foco=1&n=10');
+    var tb = tarefaBanca(); if (tb) h += item(false, '🎯 ' + tb[0], tb[1]);
     if (abertos.length) h += item(false, 'Refazer erros do caderno (<b>' + abertos.length + '</b> abertos)', '#/quiz?ids=' + abertos.slice(0, 10).join(',') + '&n=10');
     h += '<div style="margin-top:.5rem"><div class="small mut">Questões hoje: ' + feitas + ' de ' + metaq + '</div>' + bar(Math.min(100, pct(feitas, metaq))) + '</div></div>';
     h += '<div class="card"><b>Onde estudar primeiro</b><p class="small mut" style="margin:.2rem 0 .4rem">Ordenado por peso na prova e por quanto falta para você acertar.</p><div class="list">' +
@@ -885,10 +895,11 @@
     var geral = acc(function () { return true; });
     var cc = concInfo(S.concurso);
     var h = '<h1>Olá, ' + esc(primeiroNome()) + '! Vamos estudar?</h1><p class="small mut" style="margin-top:-.3rem">Concurso: <b>' + esc(cc.nome) + ' (' + esc(cc.banca) + ')</b> · Nível: <b>' + esc(nvInfo().nome) + '</b> · <a href="#/' + (inscs().length > 1 ? 'nivel' : 'cadastro') + '">' + (inscs().length > 1 ? 'alternar' : 'editar cadastro') + '</a></p>';
-    if (cc.inscFim && diasPara(cc.inscFim) >= 0) { var di = diasPara(cc.inscFim); h += '<div class="card" style="border-left:6px solid var(--warn,#b45309)"><div class="mut small">Inscrições ' + esc(cc.nome) + ' (' + esc(cc.banca) + ')</div><div class="stat">' + textoPrazo(cc.inscFim) + '</div><div class="small mut">Até ' + brDate(cc.inscFim.slice(0, 10)) + ' às ' + cc.inscFim.slice(11, 16).replace(':', 'h') + ' (horário de Rondônia). Se ainda não se inscreveu, faça no site da banca.</div></div>'; }
+    if (cc.inscFim && diasPara(cc.inscFim) >= 0) { var di = diasPara(cc.inscFim); h += '<div class="card" style="border-left:6px solid var(--warn,#b45309)"><div class="mut small">Inscrições ' + esc(cc.nome) + ' (' + esc(cc.banca) + ')</div><div class="stat">' + textoPrazo(cc.inscFim) + '</div><div class="small mut">Até ' + brDate(cc.inscFim.slice(0, 10)) + ' às ' + cc.inscFim.slice(11, 16).replace(':', 'h') + ' (horário de Rondônia). Se ainda não se inscreveu, faça no site da banca.</div><p style="margin:.4rem 0 0"><a class="btn sm pri" target="_blank" rel="noopener" href="' + esc(cc.link || cc.busca) + '">Inscrever-se no site oficial</a></p></div>'; }
+    else if (cc.inscTxt) { h += '<div class="card"><div class="mut small">Inscrição ' + esc(cc.nome) + ' (' + esc(cc.banca) + ')</div><div class="small" style="margin:.2rem 0">' + esc(cc.inscTxt) + '</div><a class="btn sm" target="_blank" rel="noopener" href="' + esc(cc.link || cc.busca) + '">Site oficial</a></div>'; }
     if (provaDe(cc)) { var d = diasPara(provaDe(cc)); h += '<div class="card"><div class="mut small">Prova ' + esc(cc.nome) + ' (' + esc(cc.banca) + ')</div><div class="stat">' + (d >= 0 ? d + ' dias' : 'Prova realizada') + '</div><div class="small mut">' + esc(provaTxt(cc)) + ' (confirmar no edital)</div></div>'; }
     else h += '<div class="card"><div class="mut small">Prova ' + esc(cc.nome) + ' (' + esc(cc.banca) + ')</div><div class="stat">Data a definir</div><div class="small mut">' + esc(cc.status) + ' <a target="_blank" rel="noopener" href="' + esc(cc.busca) + '">Acompanhar a banca</a>. Enquanto isso, o cronograma usa a prova da SEMED como referência.</div></div>';
-    h += cardRetomar() + cardTempo() + cardMeta() + cardMissao() + cardCartoes() + cardBanca();
+    h += cardRetomar() + cardTempo() + cardMeta() + cardAlertaZerar() + cardMissao() + cardCartoes() + cardBanca();
     h += '<div class="card"><div class="row"><b>' + esc(v.nome) + '</b></div><p class="small mut" style="margin:.3rem 0">Rotina do dia: teoria dirigida 60 min · questões 90 min · revisão ativa 30 min (resumo de 1 página + caderno de erros).</p>' + (prox ? '<a class="btn" href="#/aula/' + prox.m.id + '/' + prox.t.id + '">▶ Seguir a trilha: ' + esc(prox.t.titulo) + '</a>' : '<p>🎉 Você concluiu todos os tópicos desta volta.</p>') + '</div>';
     h += '<div class="grid c3"><div class="card"><div class="mut small">Revisões para hoje</div><div class="stat">' + due.length + '</div><a href="#/revisao">Abrir revisão</a></div>';
     h += '<div class="card"><div class="mut small">Meta da semana (' + feitosSem + '/' + S.meta + ' etapas)</div>' + bar(Math.min(100, pct(feitosSem, S.meta))) + '<div class="small mut" style="margin-top:.4rem">Ajuste em Ajustes.</div></div>';
@@ -1147,11 +1158,11 @@
     runQuiz(list, q);
   }
   function runQuiz(list, q, est) {
-    var i = est ? est.i : 0, acertos = est ? est.acertos : 0, errados = est ? est.errados.slice() : [], brancos = 0;
+    var i = est ? est.i : 0, acertos = est ? est.acertos : 0, errados = est ? est.errados.slice() : [], brancos = 0, t0 = Date.now();
     function lembra() { S.quizAtual = { ids: list.map(function (x) { return x.id; }), i: i, acertos: acertos, errados: errados }; S.retomar = { tipo: 'quiz', hash: '#/quiz?resume=1', ts: Date.now() }; save(); }
     function show() {
       if (i >= list.length) return fim();
-      var qu = list[i], m = mat(qu.m), t = topico(qu.m, qu.t); T.m = qu.m; T.t = qu.t; lembra();
+      var qu = list[i], m = mat(qu.m), t = topico(qu.m, qu.t); T.m = qu.m; T.t = qu.t; lembra(); t0 = Date.now();
       var h = '<div class="row"><span class="small mut">Questão ' + (i + 1) + ' de ' + list.length + ' · ' + esc(m.nome) + ' · ' + esc(t.titulo) + '</span></div>' + bar(pct(i, list.length)) +
         '<div class="card"><p class="q-enun">' + esc(isCE() ? ceTexto(qu) : qu.q) + '</p><div id="opts">' + (isCE()
           ? '<button class="opt" data-c="C"><span class="l">C</span><span>Certo</span></button><button class="opt" data-c="E"><span class="l">E</span><span>Errado</span></button><button class="btn sm" data-c="B" style="margin-top:.4rem">Deixar em branco (0 ponto)</button>'
@@ -1167,7 +1178,7 @@
       i++; lembra(); i--;
       Array.prototype.forEach.call($app.querySelectorAll('[data-c]'), function (b) { b.disabled = true; });
       var fb = '<div class="expl"><b>' + (branco ? 'Em branco: 0 ponto.' : ok ? '✔ Correto: +1 ponto.' : '✘ Errado: −1 ponto (anula um acerto).') + '</b><br>O item estava <b>' + (it.certo ? 'CERTO' : 'ERRADO') + '</b>. ' + esc(qu.e) + '</div>';
-      fb += blocoAlternativas(qu, null) + duvidaHtml(qu.id);
+      fb += tempoLinha(Math.round((Date.now() - t0) / 1000)) + alertasPalavras(qu) + blocoAlternativas(qu, null) + duvidaHtml(qu.id);
       if (!ok && !branco) fb += '<div class="small mut">Por que errou? <span class="row" style="display:inline-flex">' + [['nao_sabia', 'Não sabia'], ['confundi', 'Confundi'], ['desatencao', 'Desatenção']].map(function (x) { return '<button class="btn sm" data-mot="' + x[0] + '">' + x[1] + '</button>'; }).join('') + '</span></div>';
       fb += '<p><button class="btn pri" id="nx">' + (i + 1 < list.length ? 'Próximo →' : 'Ver resultado') + '</button></p>';
       document.getElementById('fb').innerHTML = fb; ligaDuvidas(document.getElementById('fb'));
@@ -1182,7 +1193,7 @@
         var n = +b.getAttribute('data-k'); b.disabled = true; if (n === qu.g) b.classList.add('right'); else if (n === k) b.classList.add('wrong');
       });
       var fb = '<div class="expl"><b>' + (ok ? '✔ Correto!' : '✘ Gabarito: ' + LET[qu.g]) + '</b><br>' + esc(qu.e) + '</div>';
-      fb += blocoAlternativas(qu, k) + duvidaHtml(qu.id);
+      fb += tempoLinha(Math.round((Date.now() - t0) / 1000)) + alertasPalavras(qu) + blocoAlternativas(qu, k) + duvidaHtml(qu.id);
       if (!ok) fb += '<div class="small mut">Por que errou? <span class="row" style="display:inline-flex">' + [['nao_sabia', 'Não sabia'], ['confundi', 'Confundi'], ['desatencao', 'Desatenção']].map(function (x) { return '<button class="btn sm" data-mot="' + x[0] + '">' + x[1] + '</button>'; }).join('') + '</span></div>';
       fb += '<p><button class="btn pri" id="nx">' + (i + 1 < list.length ? 'Próxima →' : 'Ver resultado') + '</button></p>';
       document.getElementById('fb').innerHTML = fb; ligaDuvidas(document.getElementById('fb'));
@@ -1192,7 +1203,7 @@
     function fim() {
       var p = pct(acertos, list.length), liq = acertos - errados.length; S.quizAtual = null; S.retomar = list[0] ? { tipo: 'materia', m: list[0].m, hash: '#/materia/' + list[0].m, ts: Date.now() } : null; save();
       $app.innerHTML = '<div class="card"><h1>Resultado</h1><div class="stat">' + (isCE() ? 'Nota líquida ' + liq + ' de ' + list.length : acertos + ' / ' + list.length + ' (' + p + '%)') + '</div>' + bar(isCE() ? pct(Math.max(0, liq), list.length) : p) +
-        (isCE() ? '<p class="small mut">' + acertos + ' certo(s), ' + errados.length + ' errado(s), ' + brancos + ' em branco. Na ' + esc(bancaAtual().nome) + ' cada erro anula um acerto: ' + (errados.length > acertos ? 'chute menos e marque só o que você domina.' : 'continue marcando só quando tiver segurança.') + '</p>' : '') +
+        (isCE() ? '<p class="small mut">' + acertos + ' certo(s), ' + errados.length + ' errado(s), ' + brancos + ' em branco. Aproveitamento dos itens marcados: <b>' + ((acertos + errados.length) ? Math.round(100 * acertos / (acertos + errados.length)) : 0) + '%</b>. Na ' + esc(bancaAtual().nome) + ' cada erro anula um acerto: ' + (errados.length > acertos ? 'abaixo de 50% de acerto nos marcados, cada marcação custa pontos; chute menos e marque só o que você domina.' : 'continue marcando só quando tiver segurança.') + '</p>' : '') +
         '<p>' + (p >= 80 ? 'Muito bem! Pode avançar.' : p >= 50 ? 'Bom caminho. Revise as explicações dos erros.' : 'Releia o resumo do tópico e tente de novo.') + '</p>' +
         '<div class="row">' + (errados.length ? '<a class="btn pri" href="#/quiz?ids=' + errados.join(',') + '&n=99">Refazer erradas</a>' : '') + '<a class="btn" href="#/erros">Caderno de erros</a><a class="btn" href="#/praticar">Mais questões</a></div></div>';
     }
@@ -1207,7 +1218,7 @@
     var D = distAtual(), dq = D.q, tot = Object.keys(dq).reduce(function (a, k) { return a + dq[k]; }, 0), mins = Math.round(tot * bancaAtual().minQ);
     var dtxt = mats().filter(function (m) { return dq[m.id]; }).map(function (m) { return m.nome.replace('Conhecimentos ', '').replace(' (RO e Porto Velho)', '') + ' ' + dq[m.id]; }).join(', ');
     h += '<div class="card"><h3 style="margin-top:0">Simulado ' + esc(nvInfo().nome) + ' · estilo ' + esc(bancaAtual().nome) + '</h3><p>' + tot + (isCE() ? ' itens Certo/Errado' : ' questões') + ' · ' + Math.floor(mins / 60) + ' h ' + pad(mins % 60) + ' min · distribuição: ' + esc(dtxt) + '.' + (S.concurso === 'semed' && S.nivel === 'medio' ? ' Ideal fazer às <b>9h15</b> de sábado, no horário real.' : '') + '</p>' +
-      '<p class="small mut">' + bancaAtual().tipo + ' <a href="#/banca">Estratégia da banca</a></p>' + (estrConf() ? '' : '<p class="aviso">Estrutura <b>estimada</b>: não li o edital deste concurso/nível. Confira quantidade e distribuição reais no edital do seu cargo.</p>') +
+      '<p class="small mut">' + bancaAtual().tipo + ' <a href="#/banca">Estratégia da banca</a></p>' + (estrConf() ? '' : '<p class="aviso">Estrutura <b>estimada</b>: não li o edital deste concurso/nível. Confira quantidade e distribuição reais no edital do seu cargo.</p>') + notaParcial() +
       '<p class="small mut">Se o banco tiver menos questões que o necessário em uma matéria, o simulado usa as disponíveis. O banco tem ' + qsOf().length + ' questões neste nível; cada simulado sorteia dentre elas, então elas se repetem.</p><button class="btn pri" id="sim-full">Iniciar simulado completo</button></div>';
     h += '<div class="card"><h3 style="margin-top:0">Mini-simulado</h3><p>cerca de ' + Math.round(tot * 0.4) + ' questões · ' + Math.round(mins * 0.4) + ' minutos · proporcional.</p><button class="btn" id="sim-mini">Iniciar mini-simulado</button></div>';
     if (S.sims.length) {
@@ -1303,11 +1314,19 @@
     h += '<p><a class="btn pri" href="#/erros">Abrir caderno de erros</a> <a class="btn" href="#/simulados">Novo simulado</a></p>';
     $app.innerHTML = h; window.scrollTo(0, 0);
   }
+  /* Mínimos por bloco do edital da PF (Cebraspe): só faz sentido num simulado do tamanho da prova */
+  function blocosHtml(e, liqM, pontos, total) {
+    var cc = concInfo(e.c || S.concurso); if (!e.ce || !cc.blocos || total < 100) return '';
+    var falhou = false, linhas = cc.blocos.map(function (b) { var n = 0; b.mats.forEach(function (m) { n += liqM[m] || 0; }); var ok = n >= b.min; if (!ok) falhou = true; return '<tr><td>' + esc(b.nome) + '</td><td>' + n + '</td><td>mín. ' + b.min + '</td><td>' + (ok ? '<span class="pill ok">ok</span>' : '<span class="pill bad">eliminaria</span>') + '</td></tr>'; });
+    var okTot = pontos >= cc.totalMin; if (!okTot) falhou = true;
+    return '<table style="margin:.5rem 0"><tr><th>Bloco (edital PF 2025)</th><th>Líquido</th><th>Mínimo</th><th></th></tr>' + linhas.join('') + '<tr><th>Total</th><th>' + pontos + '</th><th>mín. ' + cc.totalMin + '</th><th>' + (okTot ? '<span class="pill ok">ok</span>' : '<span class="pill bad">eliminaria</span>') + '</th></tr></table>' + (falhou ? '<p class="aviso" style="margin:.3rem 0">Pelas regras do edital da PF 2025, esse resultado teria sido <b>eliminado</b>. Veja qual bloco ficou abaixo do mínimo e reforce.</p>' : '');
+  }
   function mostrarResultado(e, novo) {
-    var porM = {}, porT = {}, acertos = 0, errN = 0;
+    var porM = {}, porT = {}, acertos = 0, errN = 0, liqM = {};
     e.ids.forEach(function (id) {
       var q = qById(id); if (!q) return;
       var rr = e.resp[id], ok = e.ce ? ceAcertou(q, rr) : rr === q.g; if (ok) acertos++; else if (e.ce && rr != null) errN++;
+      if (e.ce && rr != null) liqM[q.m] = (liqM[q.m] || 0) + (ok ? 1 : -1);
       porM[q.m] = porM[q.m] || { a: 0, t: 0 }; porM[q.m].t++; if (ok) porM[q.m].a++;
       var kk = q.m + '/' + q.t; porT[kk] = porT[kk] || { a: 0, t: 0 }; porT[kk].t++; if (ok) porT[kk].a++;
     });
@@ -1315,7 +1334,7 @@
     var h = (novo ? '' : '<p><a href="#/simulados">← Simulados</a></p>') + '<h1>' + (novo ? 'Resultado do simulado' : 'Simulado de ' + brDate(e.dia)) + '</h1>' + (!novo && e.c ? '<p class="small mut">' + esc(concInfo(e.c).nome + ' · ' + nomeNivel(e.n)) + '</p>' : '') + '<div class="card"><div class="stat">' + (e.ce ? 'Nota líquida ' + pontos + ' de ' + total : acertos + ' / ' + total + ' (' + p + '%)') + '</div>' + bar(p) +
       (e.ce ? '<p class="small">' + acertos + ' certo(s), ' + errN + ' errado(s), ' + (total - acertos - errN) + ' em branco. Cada erro anulou um acerto.</p>' : '') +
       '<p>' + (p >= 50 ? '<span class="pill ok">Acima dos 50% de referência</span>' : '<span class="pill bad">Abaixo dos 50% de referência</span>') + ' <span class="small mut">Tempo usado: ' + Math.round(gasto / 60) + ' min (' + (total ? Math.round(gasto / total) : 0) + ' s por ' + (e.ce ? 'item' : 'questão') + '; meta da banca: ' + Math.round(bc.minQ * 60) + ' s). Banca ' + esc(bc.nome) + ': ' + bc.nota + ' A classificação depende também da linha de corte.</span></p>' +
-      (bc.nome === 'IBADE' && semZero.length ? '<p class="aviso" style="margin:.4rem 0 0">⚠ Você zerou: <b>' + semZero.map(function (m) { return esc(mat(m).nome); }).join(', ') + '</b>. Na IBADE, segundo notícias, não pode zerar disciplina.</p>' : '') + '</div>';
+      (blocosHtml(e, liqM, pontos, total) || '') + (bc.nome === 'IBADE' && semZero.length ? '<p class="aviso" style="margin:.4rem 0 0">⚠ Você zerou: <b>' + semZero.map(function (m) { return esc(mat(m).nome); }).join(', ') + '</b>. Na IBADE, segundo notícias, não pode zerar disciplina.</p>' : '') + '</div>';
     var alvoQ = Math.ceil(total * metaNota() / 100), minQ = Math.ceil(total * 0.5), acertos0 = acertos; acertos = pontos;
     h += '<div class="card"><b>🎯 Rumo à aprovação</b><p style="margin:.3rem 0">' + (acertos >= alvoQ ? 'Você atingiu a sua meta (' + alvoQ + ' acertos).' : 'Faltaram <b>' + (alvoQ - acertos) + '</b> acerto(s) para a sua meta (' + alvoQ + ')' + (acertos < minQ ? ' e <b>' + (minQ - acertos) + '</b> para a nota mínima (' + minQ + ')' : '') + '.') + '</p><div class="row"><a class="btn pri" href="#/quiz?foco=1&n=10">Treinar pontos fracos agora</a>' + (e.dur ? '<button class="btn" id="sr-again">Refazer este simulado</button>' : '') + '</div></div>';
     h += '<h2>Por matéria</h2><div class="card">' + Object.keys(porM).map(function (m) { var x = porM[m]; return '<div style="margin:.5rem 0"><div class="row"><b>' + esc(mat(m).nome) + '</b><span class="sp"></span>' + x.a + '/' + x.t + '</div>' + bar(pct(x.a, x.t), mat(m).cor) + '</div>'; }).join('') + '</div>';
@@ -1436,6 +1455,26 @@
     var dev = cartoesDevidos(todos).length, nov = cartoesNovos(todos).length;
     return '<div class="card"><div class="row"><b>🃏 Revisão relâmpago</b><span class="sp"></span><span class="pill">' + dev + ' para revisar · ' + nov + ' novos</span></div><p class="small mut" style="margin:.3rem 0">Cartões curtos de prazos, penas, fórmulas e regras, com repetição espaçada. 5 minutos por dia fixam muito.</p><a class="btn sm pri" href="#/cartoes">Revisar agora</a></div>';
   }
+  /* ---------- Estratégia por banca: palavras-alerta, tempo por questão, tarefa do dia ---------- */
+  var ABSOLUTAS = /\b(sempre|nunca|jamais|somente|apenas|exclusivamente|unicamente|todos|todas|nenhum|nenhuma|qualquer|inteiramente|em hipótese alguma|invariavelmente)\b/i;
+  function alertasPalavras(q) {
+    var achou = [];
+    q.a.forEach(function (a, k) { var m = ABSOLUTAS.exec(a); if (m) achou.push({ k: k, p: m[1] }); });
+    if (!achou.length) return '';
+    return '<div class="small" style="margin:.4rem 0;padding:.4rem .6rem;border-radius:8px;background:rgba(180,83,9,.12)">⚠ <b>Palavras-alerta (' + esc(bancaAtual().nome) + ' costuma explorar):</b> ' + achou.map(function (x) { return LET[x.k] + ') “' + esc(x.p) + '”'; }).join(' · ') + '. Palavras absolutas (sempre, nunca, somente, apenas, todos) costumam deixar a alternativa errada, mas confira o contexto.</div>';
+  }
+  function tempoLinha(seg) {
+    var meta = Math.round(bancaAtual().minQ * 60), rapido = seg <= meta;
+    return '<div class="small" style="margin:.3rem 0;color:' + (rapido ? 'var(--ok,#15803d)' : 'var(--bad,#b91c1c)') + '">⏱ Você levou <b>' + seg + ' s</b>; a meta da banca ' + esc(bancaAtual().nome) + ' é de cerca de <b>' + meta + ' s</b> por ' + (isCE() ? 'item' : 'questão') + (rapido ? ': ótimo ritmo.' : ': treine ler e decidir mais rápido.') + '</div>';
+  }
+  function tarefaBanca() {
+    var b = bancaAtual(), cc = concInfo(S.concurso);
+    if (b.formato === 'ce') return ['Treino Certo/Errado: marque só quando tiver mais de 50% de segurança', '#/quiz?foco=1&n=10'];
+    if (b.nome === 'IBADE') { var r0 = mats().filter(riscoZero)[0]; return r0 ? ['Garantir pontos em ' + esc(r0.nome) + ' (zerar disciplina elimina na IBADE)', '#/quiz?m=' + r0.id + '&n=10'] : ['Simulado cronometrado no ritmo da IBADE (3 min por questão)', '#/simulados']; }
+    if (b.nome === 'IBGP') return ['Treino com cronômetro: ' + String(b.minQ).replace('.', ',') + ' min por questão (IBGP)', '#/simulados'];
+    if (b.nome === 'IDECAN') return ['Treino de leitura atenta com textos e leis longos (IDECAN)', '#/quiz?foco=1&n=10'];
+    return cc.fase === 'previsto' ? ['Edital ainda não saiu: reforce as matérias comuns', '#/trilha'] : null;
+  }
   function cardBanca() {
     var b = bancaAtual();
     return '<div class="card"><div class="row"><b>🎯 Como a banca ' + esc(b.nome) + ' cobra</b></div><p class="small" style="margin:.3rem 0">' + b.tipo + '</p><ul class="small" style="margin:.2rem 0;padding-left:1.1rem"><li>' + b.estrategia[0] + '</li><li>' + b.estrategia[1] + '</li></ul><a class="btn sm pri" href="#/banca">Ver estratégia completa da banca</a></div>';
@@ -1445,6 +1484,9 @@
     var g = acc(function () { return true; });
     var h = '<h1>Estilo da banca ' + esc(b.nome) + '</h1><p class="mut">O estudo, os simulados e a correção do site seguem a forma como esta banca monta e pontua a prova de <b>' + esc(cc.nome) + '</b>. As regras vêm de editais lidos e de notícias: <b>confirme no edital do seu cargo</b>.</p>';
     if (cc.banca === 'A definir') h += '<div class="aviso"><b>Banca ainda não definida</b> para este concurso.' + (cc.modelo ? ' O treino usa o modelo <b>' + esc(cc.modelo) + '</b> (a banca provável ou usual); quando o edital sair, confira o formato real.' : ' O treino usa um modelo genérico até o edital sair.') + '</div>';
+    var ed0 = C.editais && cc.edital && C.editais[cc.edital];
+    if (ed0) h += '<div class="card" style="border-left:6px solid var(--pri)"><b>📄 Regras do edital' + (cc.editalRef ? ' (referência: edital da PF 2025)' : ' deste concurso') + '</b><ul class="small" style="margin:.3rem 0">' + ed0.regras.slice(0, 4).map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul><a class="btn sm pri" href="#/edital">Ver todas as regras, cronograma e conteúdo</a></div>';
+    h += notaParcial();
     h += '<div class="card"><h3 style="margin-top:0">Formato e pontuação</h3><p>' + b.tipo + '</p><p class="small">' + b.nota + '</p><p class="small mut">Simulado do site para esta inscrição: ' + tot + ' ' + (b.formato === 'ce' ? 'itens Certo/Errado' : 'questões de múltipla escolha') + ' em cerca de ' + Math.floor(mins / 60) + ' h ' + pad(mins % 60) + ' min (' + String(b.minQ).replace('.', ',') + ' min por ' + (b.formato === 'ce' ? 'item' : 'questão') + ')' + (estrConf() ? '' : '. A distribuição é <b>estimada</b>.') + '</p></div>';
     h += '<div class="card"><h3 style="margin-top:0">Como a banca costuma cobrar</h3><ul>' + b.estilo.map(function (x) { return '<li>' + x + '</li>'; }).join('') + '</ul></div>';
     h += '<div class="card" style="border-left:6px solid var(--pri)"><h3 style="margin-top:0">Estratégia para acertar o máximo</h3><ul>' + b.estrategia.map(function (x) { return '<li>' + x + '</li>'; }).join('') + '</ul></div>';
@@ -1468,8 +1510,8 @@
       lista.forEach(function (cc) {
         var meus = inscs().filter(function (i) { return i.c === cc.id; }), d = provaDe(cc, cc.niveis.indexOf(S.nivel) >= 0 ? S.nivel : cc.niveis[0]) ? diasPara(provaDe(cc, cc.niveis.indexOf(S.nivel) >= 0 ? S.nivel : cc.niveis[0])) : null;
         h += '<div class="card"><div class="row"><b>' + esc(cc.nome) + '</b><span class="pill">' + esc(cc.banca === 'A definir' ? (cc.modelo ? 'banca a definir (provável ' + cc.modelo + ')' : 'banca a definir') : cc.banca) + '</span><span class="pill ' + (cc.fase === 'abertas' ? 'ok' : cc.fase === 'previsto' ? 'warn' : '') + '">' + esc(rotFase(cc.fase)) + '</span>' + (meus.length ? '<span class="pill ok">na sua lista</span>' : '') + '<span class="sp"></span><span class="small mut">' + esc(provaDe(cc) ? 'Prova: ' + provaTxt(cc) + (d !== null ? (d >= 0 ? ' · faltam ' + d + ' dia(s)' : ' · já realizada') : '') : 'Prova: sem data oficial') + '</span></div>' +
-          '<div class="small mut" style="margin:.2rem 0">' + esc(cc.completo) + ' · ' + esc(cc.cidade) + '</div><p class="small" style="margin:.4rem 0">' + esc(cc.status) + '</p>' +
-          '<div class="row" style="flex-wrap:wrap;gap:.4rem"><span class="small mut">Estudar como:</span>' + cc.niveis.map(function (n) { return '<button class="btn sm' + (S.concurso === cc.id && S.nivel === n ? ' pri' : '') + '" data-cc="' + cc.id + '" data-n="' + n + '">' + esc(nomeNivel(n)) + '</button>'; }).join('') + '<a class="btn sm" target="_blank" rel="noopener" href="' + esc(cc.busca) + '">Site da banca / busca</a></div></div>';
+          '<div class="small mut" style="margin:.2rem 0">' + esc(cc.completo) + ' · ' + esc(cc.cidade) + '</div><p class="small" style="margin:.4rem 0;padding:.4rem .6rem;border-radius:8px;background:rgba(29,78,216,.08)">📝 <b>Inscrição:</b> ' + esc(cc.inscTxt || 'sem data definida') + (cc.inscFim && diasPara(cc.inscFim) >= 0 ? ' <b>(' + textoPrazo(cc.inscFim).toLowerCase() + ')</b>' : '') + '</p><p class="small" style="margin:.4rem 0">' + esc(cc.status) + '</p>' +
+          '<div class="row" style="flex-wrap:wrap;gap:.4rem"><span class="small mut">Estudar como:</span>' + cc.niveis.map(function (n) { return '<button class="btn sm' + (S.concurso === cc.id && S.nivel === n ? ' pri' : '') + '" data-cc="' + cc.id + '" data-n="' + n + '">' + esc(nomeNivel(n)) + '</button>'; }).join('') + '<a class="btn sm pri" target="_blank" rel="noopener" href="' + esc(cc.link || cc.busca) + '">' + (cc.fase === 'abertas' ? 'Inscrever-se (site oficial)' : 'Site oficial') + '</a><a class="btn sm" target="_blank" rel="noopener" href="' + esc(cc.busca) + '">Buscar notícias</a></div></div>';
       });
     });
     if (!C.concursos.some(function (cc) { return casa(cc, FILT); })) h += '<div class="card mut">Nenhum concurso com esses filtros.</div>';
@@ -1484,7 +1526,66 @@
     });
   }
 
+  /* ---------- Edital com dados oficiais (IPAM e PF) ---------- */
+  function buscaItens(texto) {
+    var partes = String(texto).split(/\.\s+(?=[A-ZÀ-Ú0-9])/).filter(function (x) { return x.trim().length > 3; });
+    return '<ul class="small" style="margin:.3rem 0;padding-left:1.1rem">' + partes.map(function (x) { x = x.replace(/\.$/, ''); return '<li>' + esc(x) + '. <a target="_blank" rel="noopener" title="Buscar resumo em PDF" href="https://www.google.com/search?q=' + encodeURIComponent(x.slice(0, 120) + ' resumo pdf concurso') + '">🔎</a></li>'; }).join('') + '</ul>';
+  }
+  function matLink(id) { return id && mat(id) && tvisMat(id) ? ' <a class="btn sm" href="#/materia/' + id + '">Estudar no site</a>' : ''; }
+  function tvisMat(id) { var m = mat(id); return !!m && topsOf(m).length > 0; }
+  function vEditalDados(ed, cc) {
+    var ref = !!cc.editalRef, h = '<h1>Edital e regras da prova</h1>';
+    h += '<div class="aviso"><b>' + esc(ed.titulo) + '</b>' + (ref ? '<br>Este concurso ainda não tem edital. As regras abaixo são as do edital da <b>PF de 2025</b>, que serve de referência (mesma família de carreira, banca provável Cebraspe). Confira o edital novo quando sair.' : '') + '<br><span class="small">Fonte: ' + esc(ed.fonte.replace(/\.$/, '')) + '. Nada aqui substitui o edital oficial.</span></div>';
+    h += '<div class="card" style="border-left:6px solid var(--pri)"><h3 style="margin-top:0">📝 Inscrição e links oficiais</h3><p>' + esc(cc.inscTxt || '') + '</p>' + (ed.inscricao ? '<p class="small mut">Taxa: R$ ' + ed.inscricao.taxa.medio + ' (nível médio) e R$ ' + ed.inscricao.taxa.superior + ' (nível superior). Pedido de isenção: ' + esc(ed.inscricao.isencao) + '. Último dia para pagar o boleto: ' + esc(ed.inscricao.pagamento) + '.</p>' : '') + '<div class="row" style="flex-wrap:wrap;gap:.4rem"><a class="btn pri" target="_blank" rel="noopener" href="' + esc(ed.link || cc.link) + '">' + (ref ? 'Edital da PF 2025 (Cebraspe)' : 'Inscrição e edital no site da banca') + '</a>' + (ed.linkIpam ? '<a class="btn" target="_blank" rel="noopener" href="' + esc(ed.linkIpam) + '">Site do IPAM</a>' : '') + (ed.linkNovo ? '<a class="btn" target="_blank" rel="noopener" href="' + esc(ed.linkNovo) + '">Site da Polícia Federal</a>' : '') + '</div></div>';
+    if (ed.estrutura && !ed.blocos) {
+      var niv = ed.estrutura[S.nivel] ? S.nivel : 'medio', linhas = ed.estrutura[niv], totQ = 0, totP = 0;
+      linhas.forEach(function (l) { totQ += l[1]; totP += l[1] * l[2]; });
+      h += '<h2>Estrutura da prova objetiva (' + esc(nomeNivel(niv)) + ')</h2><div class="card"><table><tr><th>Disciplina</th><th>Questões</th><th>Peso</th><th>Pontos</th><th>%</th></tr>' + linhas.map(function (l) { var pts = l[1] * l[2]; return '<tr><td>' + esc(l[0]) + matLink(l[3]) + '</td><td>' + l[1] + '</td><td>' + l[2] + '</td><td>' + pts + '</td><td>' + Math.round(100 * pts / totP) + '%</td></tr>'; }).join('') + '<tr><th>Total</th><th>' + totQ + '</th><th></th><th>' + totP + '</th><th></th></tr></table><p class="small mut">Etapas: ' + ed.etapas[niv].map(esc).join('; ') + '.</p></div>';
+      // calculadora de meta
+      h += '<div class="card"><h3 style="margin-top:0">🎯 Quanto preciso acertar nos Específicos?</h3><p class="small mut">Nota mínima: 50% de ' + ed.totalPontos + ' = ' + (ed.totalPontos * ed.minimo) + ' pontos. As 30 questões gerais valem no máximo 30; os Específicos valem 2 pontos cada.</p><label for="cg">Seu acerto nas 30 questões gerais: <b id="cgv">70</b>%</label><input type="range" id="cg" min="0" max="100" step="5" value="70"><div id="cgr" style="margin-top:.5rem"></div></div>';
+      h += '<h2>Regras do edital que mudam a sua estratégia</h2><div class="card"><ul>' + ed.regras.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul></div>';
+      h += '<h2>Escolha o seu cargo</h2><div class="card"><label for="cargo">Cargo</label><select id="cargo">' + ed.cargos.filter(function (c) { return c.nivel === niv; }).map(function (c) { return '<option value="' + c.cod + '"' + (cargoSel(ed, niv) === c.cod ? ' selected' : '') + '>' + esc(c.cod + ' · ' + c.nome) + '</option>'; }).join('') + '</select><div id="cargo-det"></div></div>';
+      h += '<h2>Desempate</h2><div class="card"><ol>' + ed.desempate[niv].map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ol><p class="small mut">Antes de tudo, o desempate por idade favorece o idoso (Estatuto do Idoso). Por isso, <b>Conhecimentos Específicos</b> e <b>Português</b> decidem os empates.</p></div>';
+      h += '<h2>Cronograma previsto</h2><div class="card"><table>' + ed.cronograma.geral.concat(ed.cronograma[niv]).map(function (l) { return '<tr><th>' + esc(l[0]) + '</th><td>' + esc(l[1]) + '</td></tr>'; }).join('') + '</table><p class="small mut">As datas podem ser alteradas pelo IPAM ou pelo IBADE (Anexo II).</p></div>';
+      h += '<h2>Conteúdo programático oficial (Anexo III)</h2>' + Object.keys(ed.conteudoGeral[niv]).map(function (k, ix) { var ids = ['portugues', 'logica', 'pf-info', 'pf-adm', 'previdencia'], mid = linhas[ix] && linhas[ix][3]; return '<details class="card"><summary><b>' + esc(k) + '</b>' + '</summary>' + matLink(mid) + buscaItens(ed.conteudoGeral[niv][k]) + '</details>'; }).join('');
+    } else if (ed.blocos) {
+      h += '<h2>Estrutura da prova objetiva (P1: 120 itens Certo/Errado)</h2><div class="card"><table><tr><th>Bloco</th><th>Itens</th></tr>' + ed.estrutura.map(function (l) { return '<tr><td>' + esc(l[0]) + '</td><td>' + l[1] + '</td></tr>'; }).join('') + '<tr><th>Total</th><th>120</th></tr></table></div>';
+      h += '<div class="card"><h3 style="margin-top:0">🎯 Quanto preciso marcar e acertar?</h3><p class="small mut">Mínimo para não ser eliminado: 48 pontos líquidos (acertos − erros). Marque só o que tem segurança.</p><div id="pfcalc"></div></div>';
+      h += '<h2>Regras do edital</h2><div class="card"><ul>' + ed.regras.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul></div>';
+      var MAPA = { 'LÍNGUA PORTUGUESA': 'portugues', 'NOÇÕES DE DIREITO ADMINISTRATIVO': 'pf-adm', 'NOÇÕES DE DIREITO CONSTITUCIONAL': 'pf-const', 'NOÇÕES DE DIREITO PENAL E DE DIREITO PROCESSUAL PENAL': 'pf-penal', 'DIREITOS HUMANOS': 'pf-dh', 'LEGISLAÇÃO ESPECIAL': 'pf-leis', 'RACIOCÍNIO LÓGICO': 'logica', 'INFORMÁTICA': 'pf-info', 'CONTABILIDADE GERAL': 'pf-contab' };
+      h += '<h2>Conteúdo do Agente de Polícia Federal (edital 2025)</h2>';
+      Object.keys(ed.blocos).forEach(function (b) { h += '<h3 style="margin:.6rem 0 .2rem">' + esc(b) + '</h3>' + Object.keys(ed.blocos[b]).map(function (k) { return '<details class="card"><summary><b>' + esc(k) + '</b></summary>' + matLink(MAPA[k]) + buscaItens(ed.blocos[b][k]) + '</details>'; }).join(''); });
+    }
+    $app.innerHTML = h;
+    var cg = document.getElementById('cg');
+    if (cg) {
+      var ed2 = ed, desenha = function () {
+        var g = +cg.value / 100, pts = 30 * g, falta = ed2.totalPontos * ed2.minimo - pts, acertos = Math.max(0, Math.ceil(falta / 2)), tot = 65;
+        document.getElementById('cgv').textContent = cg.value;
+        document.getElementById('cgr').innerHTML = '<div class="grid c3"><div class="card"><div class="small mut">Pontos nos gerais</div><div class="stat">' + (Math.round(pts * 10) / 10) + '</div></div><div class="card"><div class="small mut">Faltam para ' + tot + '</div><div class="stat">' + (falta > 0 ? Math.round(falta * 10) / 10 : 0) + '</div></div><div class="card"><div class="small mut">Acertos nos específicos</div><div class="stat">' + acertos + '/50</div></div></div><p class="small mut">Para atingir a nota mínima você precisa acertar <b>' + acertos + ' das 50</b> questões específicas (' + Math.round(100 * acertos / 50) + '%). Mire mais alto: a classificação por posição pede nota bem acima do mínimo.</p>';
+      };
+      cg.oninput = desenha; desenha();
+    }
+    var sel = document.getElementById('cargo');
+    if (sel) {
+      var mostra = function () {
+        var c = ed.cargos.filter(function (x) { return x.cod === sel.value; })[0]; S.cargo = S.cargo || {}; S.cargo[S.concurso] = c.cod; save();
+        var vg = c.vagas;
+        document.getElementById('cargo-det').innerHTML = '<table style="margin-top:.5rem"><tr><th>Vagas</th><td>' + vg.total + ' (ampla ' + vg.ac + ', PcD ' + vg.pcd + ', pretos e pardos ' + vg.ppp + ', idosos ' + vg.ido + ')</td></tr><tr><th>Salário</th><td>R$ ' + c.salario.toLocaleString('pt-BR') + ',00 · ' + c.horas + ' h semanais</td></tr><tr><th>Posição máxima para não ser eliminado</th><td>' + c.posicao.ac + 'º (ampla), ' + c.posicao.pcd + 'º (PcD), ' + c.posicao.ppp + 'º (pretos e pardos), ' + c.posicao.ido + 'º (idosos), pela nota da objetiva (item 11.6)</td></tr></table>' +
+          '<h3>Conhecimentos Específicos do seu cargo (50 questões, peso 2)</h3><p class="small mut">Este conteúdo vale 77% da nota. Cada item abaixo tem um atalho 🔎 para buscar resumos em PDF.</p><div class="row" style="flex-wrap:wrap;gap:.4rem"><a class="btn sm pri" target="_blank" rel="noopener" href="https://www.youtube.com/results?search_query=' + encodeURIComponent(c.nome + ' concurso IPAM Porto Velho videoaula') + '">▶ Videoaulas no YouTube</a><a class="btn sm" target="_blank" rel="noopener" href="https://www.google.com/search?q=' + encodeURIComponent(c.nome + ' IPAM Porto Velho 2026 conteúdo resumo pdf') + '">🔎 Resumos em PDF</a></div>' + buscaItens(c.especificos);
+      };
+      sel.onchange = mostra; mostra();
+    }
+    var pc = document.getElementById('pfcalc');
+    if (pc) {
+      pc.innerHTML = '<table><tr><th>Itens que você marca</th><th>Acerto mínimo para 48 pontos</th></tr>' + [60, 80, 100, 120].map(function (m) { var a = (48 / m + 1) / 2; return '<tr><td>' + m + ' de 120</td><td><b>' + Math.round(a * 1000) / 10 + '%</b> dos marcados</td></tr>'; }).join('') + '</table><p class="small mut">Fórmula: pontos = marcados × (2 × acerto − 1). Marcar menos itens exige acerto maior, mas protege contra erros que anulam acertos.</p>';
+    }
+  }
+  function cargoSel(ed, niv) { var c = (S.cargo || {})[S.concurso]; return ed.cargos.some(function (x) { return x.cod === c && x.nivel === niv; }) ? c : ed.cargos.filter(function (x) { return x.nivel === niv; })[0].cod; }
+
   function vEdital() {
+    var cc0 = concInfo(S.concurso), ed0 = C.editais && cc0.edital && C.editais[cc0.edital];
+    if (ed0) return vEditalDados(ed0, cc0);
     $app.innerHTML = '<h1>Edital e regras da prova</h1>' +
       (!estrConf() ? '<div class="aviso">Esta tela resume o cargo de <b>nível médio</b> da SEMED (edital 24/2026). Para a sua inscrição (' + esc(rotulo({ c: S.concurso, n: S.nivel })) + ', banca ' + esc(concInfo(S.concurso).banca) + '), consulte o Anexo I (cargos) e o Anexo IV (conteúdos) do edital: <b>A CONFIRMAR NO EDITAL</b>.</div>' : '') +
       '<div class="aviso">Informações do corpo do <b>Edital SEMED nº 24/2026</b>, da <b>retificação nº 27/2026 (09/10/2026)</b>, lida em 30/10/2026, e de reportagens. O conteúdo oficial de <b>Legislação</b> (ensino médio) está confirmado abaixo; o texto completo do Anexo IV de Português, Lógica, Gerais e Específicos <b>não veio</b> nos PDFs que consegui ler: baixe no site da banca e compare com a trilha. <b>Nada aqui substitui o edital oficial.</b></div>' +
